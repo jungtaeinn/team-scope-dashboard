@@ -1,0 +1,176 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+/// 연동 프로젝트 (Jira, GitLab 등)
+model Project {
+  id         String   @id @default(cuid())
+  name       String
+  type       String // "jira" | "gitlab"
+  baseUrl    String
+  token      String
+  projectKey String? // Jira: "APM", GitLab: "907"
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  jiraIssues JiraIssue[]
+  gitlabMRs  GitlabMR[]
+  syncLogs   SyncLog[]
+}
+
+/// 개발자 정보
+model Developer {
+  id             String          @id @default(cuid())
+  name           String
+  jiraUsername    String?
+  gitlabUsername String?
+  groupId        String?
+  group          DeveloperGroup? @relation(fields: [groupId], references: [id])
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  scores      Score[]
+  jiraIssues  JiraIssue[]
+  gitlabMRs   GitlabMR[]
+  gitlabNotes GitlabNote[]
+}
+
+/// 개발자 그룹
+model DeveloperGroup {
+  id         String      @id @default(cuid())
+  name       String
+  developers Developer[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+/// Jira 이슈 스냅샷
+model JiraIssue {
+  id              String   @id @default(cuid())
+  issueKey        String
+  summary         String
+  status          String
+  issueType       String
+  assigneeId      String?
+  assignee        Developer? @relation(fields: [assigneeId], references: [id])
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id])
+  priority        String?
+  sprintName      String?
+  sprintState     String?
+  storyPoints     Float?
+  ganttStartDate  String? // WBSGantt 시작일
+  ganttEndDate    String? // WBSGantt 완료일
+  baselineStart   String? // 기준선 시작일
+  baselineEnd     String? // 기준선 완료일
+  ganttProgress   Float? // 진행 상황 (%)
+  plannedEffort   Float? // 계획 공수 (MH)
+  actualEffort    Float? // 투입 공수 (MH)
+  remainingEffort Float? // 남은 공수
+  timeSpent       Int? // 작업 시간 (초)
+  dueDate         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  syncedAt        DateTime @default(now())
+
+  @@unique([issueKey, projectId])
+}
+
+/// GitLab Merge Request 스냅샷
+model GitlabMR {
+  id             String   @id @default(cuid())
+  mrIid          Int
+  title          String
+  state          String // "merged" | "opened" | "closed"
+  authorId       String?
+  author         Developer? @relation(fields: [authorId], references: [id])
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id])
+  notesCount     Int      @default(0)
+  changesCount   Int?
+  additions      Int?
+  deletions      Int?
+  sourceBranch   String?
+  targetBranch   String?
+  mrCreatedAt    String
+  mrMergedAt     String?
+  reviewLeadTime Int? // 리뷰 소요 시간 (초)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  syncedAt       DateTime @default(now())
+
+  notes GitlabNote[]
+
+  @@unique([mrIid, projectId])
+}
+
+/// GitLab MR 코멘트
+model GitlabNote {
+  id          String   @id @default(cuid())
+  noteId      Int
+  mrId        String
+  mr          GitlabMR @relation(fields: [mrId], references: [id])
+  body        String
+  authorId    String?
+  author      Developer? @relation(fields: [authorId], references: [id])
+  isSystem    Boolean  @default(false)
+  isResolvable Boolean @default(false)
+  isResolved  Boolean  @default(false)
+  noteCreatedAt String
+  createdAt   DateTime @default(now())
+
+  @@unique([noteId, mrId])
+}
+
+/// 개발자 성과 점수
+model Score {
+  id             String   @id @default(cuid())
+  developerId    String
+  developer      Developer @relation(fields: [developerId], references: [id])
+  period         String // "2026-03" (월별)
+  jiraScore      Float    @default(0)
+  gitlabScore    Float    @default(0)
+  compositeScore Float    @default(0)
+  breakdown      String // JSON 문자열 (SQLite JSON 미지원)
+  calculatedAt   DateTime @default(now())
+
+  @@unique([developerId, period])
+}
+
+/// 대시보드 레이아웃 저장
+model DashboardLayout {
+  id        String   @id @default(cuid())
+  name      String
+  widgets   String // JSON 문자열 [{type, x, y, w, h, config}]
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// 스코어링 가중치 설정
+model ScoringWeight {
+  id        String @id @default(cuid())
+  key       String @unique
+  value     Float
+  label     String
+  category  String // "jira" | "gitlab" | "composite"
+  updatedAt DateTime @updatedAt
+}
+
+/// 데이터 동기화 로그
+model SyncLog {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id])
+  status    String // "running" | "success" | "failed"
+  message   String?
+  itemCount Int      @default(0)
+  startedAt DateTime @default(now())
+  endedAt   DateTime?
+}
