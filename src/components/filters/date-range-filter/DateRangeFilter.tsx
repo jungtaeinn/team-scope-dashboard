@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Calendar } from 'lucide-react';
-import { startOfMonth, endOfMonth, subMonths, subYears, startOfYear, endOfYear, startOfQuarter, endOfQuarter, format } from 'date-fns';
+import { startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, startOfQuarter, endOfQuarter, format } from 'date-fns';
 import type { DateRange } from '@/common/types';
 
 type TabType = 'month' | 'quarter' | 'year';
@@ -16,32 +16,92 @@ interface DateRangeFilterProps {
 
 interface QuickSelectOption {
   label: string;
+  tab: TabType;
   getRange: () => DateRange;
 }
 
+export function getDefaultRecentRange(): DateRange {
+  const now = new Date();
+  return {
+    from: format(startOfMonth(subMonths(now, 2)), 'yyyy-MM-dd'),
+    to: format(endOfMonth(now), 'yyyy-MM-dd'),
+  };
+}
+
+export function getPreviousThreeMonthsRange(): DateRange {
+  const now = new Date();
+  return {
+    from: format(startOfMonth(subMonths(now, 3)), 'yyyy-MM-dd'),
+    to: format(endOfMonth(subMonths(now, 1)), 'yyyy-MM-dd'),
+  };
+}
+
+export function getCurrentYearRange(): DateRange {
+  const now = new Date();
+  return {
+    from: format(startOfYear(now), 'yyyy-MM-dd'),
+    to: format(endOfYear(now), 'yyyy-MM-dd'),
+  };
+}
+
+function inferActiveTab(value: DateRange): TabType {
+  const now = new Date();
+  const currentYear = {
+    from: format(startOfYear(now), 'yyyy-MM-dd'),
+    to: format(endOfYear(now), 'yyyy-MM-dd'),
+  };
+  const currentQuarter = {
+    from: format(startOfQuarter(now), 'yyyy-MM-dd'),
+    to: format(endOfQuarter(now), 'yyyy-MM-dd'),
+  };
+
+  if (value.from === currentYear.from && value.to === currentYear.to) {
+    return 'year';
+  }
+
+  if (value.from === currentQuarter.from && value.to === currentQuarter.to) {
+    return 'quarter';
+  }
+
+  return 'month';
+}
+
 export function DateRangeFilter({ value, onChange, className }: DateRangeFilterProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('month');
+  const getDefaultMonthRange = useCallback(() => getDefaultRecentRange(), []);
 
   const quickSelectOptions = useMemo<QuickSelectOption[]>(() => {
     const now = new Date();
     return [
-      { label: '이번 달', getRange: () => ({ from: format(startOfMonth(now), 'yyyy-MM-dd'), to: format(endOfMonth(now), 'yyyy-MM-dd') }) },
-      { label: '지난 달', getRange: () => { const lm = subMonths(now, 1); return { from: format(startOfMonth(lm), 'yyyy-MM-dd'), to: format(endOfMonth(lm), 'yyyy-MM-dd') }; } },
-      { label: '최근 3개월', getRange: () => ({ from: format(startOfMonth(subMonths(now, 2)), 'yyyy-MM-dd'), to: format(endOfMonth(now), 'yyyy-MM-dd') }) },
-      { label: '올해', getRange: () => ({ from: format(startOfYear(now), 'yyyy-MM-dd'), to: format(endOfYear(now), 'yyyy-MM-dd') }) },
-      { label: '작년', getRange: () => { const ly = subYears(now, 1); return { from: format(startOfYear(ly), 'yyyy-MM-dd'), to: format(endOfYear(ly), 'yyyy-MM-dd') }; } },
+      { label: '이번 달', tab: 'month', getRange: () => ({ from: format(startOfMonth(now), 'yyyy-MM-dd'), to: format(endOfMonth(now), 'yyyy-MM-dd') }) },
+      { label: '지난 달', tab: 'month', getRange: () => { const lm = subMonths(now, 1); return { from: format(startOfMonth(lm), 'yyyy-MM-dd'), to: format(endOfMonth(lm), 'yyyy-MM-dd') }; } },
+      { label: '지난 3개월', tab: 'month', getRange: () => getPreviousThreeMonthsRange() },
+      { label: '최근', tab: 'month', getRange: () => getDefaultRecentRange() },
+      { label: '올해', tab: 'year', getRange: () => getCurrentYearRange() },
     ];
   }, []);
 
+  const selectedQuickLabel = useMemo(() => {
+    const matched = quickSelectOptions.find((option) => {
+      const range = option.getRange();
+      return range.from === value.from && range.to === value.to;
+    });
+
+    return matched?.label ?? null;
+  }, [quickSelectOptions, value.from, value.to]);
+
+  const activeTab = useMemo<TabType>(() => {
+    const matched = quickSelectOptions.find((option) => option.label === selectedQuickLabel);
+    return matched?.tab ?? inferActiveTab(value);
+  }, [quickSelectOptions, selectedQuickLabel, value]);
+
   const handleTabChange = useCallback((tab: TabType) => {
-    setActiveTab(tab);
     const now = new Date();
     switch (tab) {
-      case 'month': onChange({ from: format(startOfMonth(now), 'yyyy-MM-dd'), to: format(endOfMonth(now), 'yyyy-MM-dd') }); break;
+      case 'month': onChange(getDefaultMonthRange()); break;
       case 'quarter': onChange({ from: format(startOfQuarter(now), 'yyyy-MM-dd'), to: format(endOfQuarter(now), 'yyyy-MM-dd') }); break;
       case 'year': onChange({ from: format(startOfYear(now), 'yyyy-MM-dd'), to: format(endOfYear(now), 'yyyy-MM-dd') }); break;
     }
-  }, [onChange]);
+  }, [getDefaultMonthRange, onChange]);
 
   const handleFromChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, from: e.target.value }), [value, onChange]);
   const handleToChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => onChange({ ...value, to: e.target.value }), [value, onChange]);
@@ -77,8 +137,15 @@ export function DateRangeFilter({ value, onChange, className }: DateRangeFilterP
           <button
             key={option.label}
             type="button"
-            onClick={() => onChange(option.getRange())}
-            className="rounded-md border px-2.5 py-1 text-xs text-[var(--muted-foreground)] transition-colors hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 hover:text-[var(--primary)]"
+            onClick={() => {
+              onChange(option.getRange());
+            }}
+            className={cn(
+              'rounded-md border px-2.5 py-1 text-xs transition-colors',
+              selectedQuickLabel === option.label
+                ? 'border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]'
+                : 'text-[var(--muted-foreground)] hover:border-[var(--primary)] hover:bg-[var(--primary)]/5 hover:text-[var(--primary)]',
+            )}
           >
             {option.label}
           </button>

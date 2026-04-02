@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowUpDown, ChevronDown, ChevronUp, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getGrade, getGradeColor } from '@/lib/utils/number-format';
+import { useLoadingBar } from '@/components/_ui/loading-bar';
 
 /** 개발자 랭킹 행 데이터 */
 interface DeveloperRow {
@@ -49,6 +50,7 @@ function GradeBadge({ score }: { score: number }) {
  */
 export function DeveloperRankingTable({ className, data }: DeveloperRankingTableProps) {
   const router = useRouter();
+  const { start } = useLoadingBar();
   const [sortKey, setSortKey] = useState<SortKey>('compositeScore');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [showGuide, setShowGuide] = useState(false);
@@ -101,7 +103,9 @@ export function DeveloperRankingTable({ className, data }: DeveloperRankingTable
   return (
     <div className={cn('overflow-hidden rounded-xl border bg-[var(--card)]', className)}>
       <div className="flex items-center justify-between border-b bg-[var(--muted)]/50 px-4 py-2">
-        <p className="text-xs font-medium text-[var(--muted-foreground)]">행 클릭 시 개발자 상세 페이지로 이동합니다.</p>
+        <p className="text-xs font-medium text-[var(--muted-foreground)]">
+          행 클릭 시 개발자 상세 페이지로 이동합니다. 공수활용률은 현재 선택한 기간 전체 기준입니다.
+        </p>
         <button
           type="button"
           onClick={() => setShowGuide((prev) => !prev)}
@@ -136,7 +140,7 @@ export function DeveloperRankingTable({ className, data }: DeveloperRankingTable
               <p><span className="font-medium text-[var(--card-foreground)]">종합점수:</span> Jira 점수와 GitLab 점수의 가중 합산</p>
               <p><span className="font-medium text-[var(--card-foreground)]">Jira점수:</span> 완료율, 일정 준수율, 공수 정확도, 작업 기록 기준</p>
               <p><span className="font-medium text-[var(--card-foreground)]">GitLab점수:</span> MR 생산성, 리뷰 참여도, 피드백 반영도, 리드타임, CI 통과율 기준</p>
-              <p><span className="font-medium text-[var(--card-foreground)]">공수활용률:</span> 현재는 공수 정확도 지표를 기반으로 산출</p>
+              <p><span className="font-medium text-[var(--card-foreground)]">공수활용률:</span> 현재 선택한 기간 전체의 영업일 대비 Jira 일정이 배정된 일수 비율</p>
               <p><span className="font-medium text-[var(--card-foreground)]">트렌드:</span> 전월 대비 변화율 (데이터 없을 경우 0%)</p>
               <p><span className="font-medium text-[var(--card-foreground)]">등급:</span> 종합점수 구간(A/B/C/D/F)으로 자동 계산</p>
             </div>
@@ -169,7 +173,10 @@ export function DeveloperRankingTable({ className, data }: DeveloperRankingTable
             {sortedData.map((dev, idx) => (
               <tr
                 key={dev.id}
-                onClick={() => router.push(`/developer/${dev.id}`)}
+                onClick={() => {
+                  start();
+                  router.push(`/developer/${dev.id}`);
+                }}
                 className="cursor-pointer border-b transition-colors last:border-b-0 hover:bg-[var(--accent)]"
               >
                 <td className="px-4 py-3 font-medium text-[var(--muted-foreground)]">{idx + 1}</td>

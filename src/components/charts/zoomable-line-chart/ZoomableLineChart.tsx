@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Brush,
   CartesianGrid,
@@ -8,7 +8,7 @@ import {
   Line,
   LineChart,
   ReferenceArea,
-  ResponsiveContainer,
+  ReferenceLine,
   Tooltip,
   XAxis,
   YAxis,
@@ -32,6 +32,13 @@ interface ZoomableLineChartProps extends ChartProps {
   dataKeys: string[];
   /** 차트 상단 제목 */
   title?: string;
+  /** 기준선 목록 */
+  referenceLines?: Array<{
+    y: number;
+    label: string;
+    color: string;
+    dashArray?: string;
+  }>;
 }
 
 const LINE_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'];
@@ -82,11 +89,37 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
  * 마우스 드래그로 특정 범위를 선택하면 해당 구간으로 확대되며,
  * 하단 Brush로 범위를 조절할 수 있습니다.
  */
-export function ZoomableLineChart({ data, dataKeys, title, className }: ZoomableLineChartProps) {
+export function ZoomableLineChart({ data, dataKeys, title, className, referenceLines = [] }: ZoomableLineChartProps) {
   const [refAreaLeft, setRefAreaLeft] = useState<string | null>(null);
   const [refAreaRight, setRefAreaRight] = useState<string | null>(null);
   const [zoomRange, setZoomRange] = useState<[number, number] | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+
+    const updateSize = (width: number, height: number) => {
+      setChartSize({
+        width: Math.max(0, Math.round(width)),
+        height: Math.max(0, Math.round(height)),
+      });
+    };
+
+    const rect = node.getBoundingClientRect();
+    updateSize(rect.width, rect.height);
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      updateSize(entry.contentRect.width, entry.contentRect.height);
+    });
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
 
   const displayData = useMemo(() => {
     if (!zoomRange) return data;
@@ -138,7 +171,7 @@ export function ZoomableLineChart({ data, dataKeys, title, className }: Zoomable
   }, []);
 
   return (
-    <div className={cn('flex h-full flex-col gap-1', className)}>
+    <div className={cn('flex h-full min-h-0 flex-col gap-1 overflow-hidden', className)}>
       <div className="flex shrink-0 items-center justify-between">
         {title && <h3 className="text-sm font-semibold text-[var(--card-foreground)]">{title}</h3>}
         {isZoomed && (
@@ -152,49 +185,71 @@ export function ZoomableLineChart({ data, dataKeys, title, className }: Zoomable
         )}
       </div>
 
-      <ResponsiveContainer width="100%" height="100%" minHeight={200}>
-        <LineChart
-          data={displayData}
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} stroke="var(--border)" />
-          <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} stroke="var(--border)" />
-          <Tooltip content={<ChartTooltip />} />
-          <Legend
-            formatter={(value: string) => toKorean(value)}
-            wrapperStyle={{ fontSize: 12 }}
-          />
-          {dataKeys.map((key, i) => (
-            <Line
-              key={key}
-              type="monotone"
-              dataKey={key}
-              name={key}
-              stroke={LINE_COLORS[i % LINE_COLORS.length]}
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4 }}
-              animationDuration={600}
+      <div ref={containerRef} className="min-h-0 flex-1 overflow-hidden">
+        {chartSize.width > 0 && chartSize.height > 0 ? (
+          <LineChart
+            width={chartSize.width}
+            height={chartSize.height}
+            data={displayData}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            margin={{ top: 4, right: 12, left: 0, bottom: 0 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} stroke="var(--border)" />
+            <YAxis tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }} stroke="var(--border)" />
+            <Tooltip content={<ChartTooltip />} />
+            <Legend
+              formatter={(value: string) => toKorean(value)}
+              wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
             />
-          ))}
-          {refAreaLeft && refAreaRight && (
-            <ReferenceArea x1={refAreaLeft} x2={refAreaRight} strokeOpacity={0.3} fill="#6366f1" fillOpacity={0.15} />
-          )}
-          {!isZoomed && data.length > 1 && (
-            <Brush
-              dataKey="date"
-              height={24}
-              stroke="#6366f1"
-              fill="rgba(30, 41, 59, 0.35)"
-              travellerWidth={8}
-            />
-          )}
-        </LineChart>
-      </ResponsiveContainer>
+            {referenceLines.map((line) => (
+              <ReferenceLine
+                key={`${line.label}-${line.y}`}
+                y={line.y}
+                stroke={line.color}
+                strokeDasharray={line.dashArray ?? '6 6'}
+                strokeWidth={1.5}
+                ifOverflow="extendDomain"
+                label={{
+                  value: line.label,
+                  position: 'insideTopRight',
+                  fill: line.color,
+                  fontSize: 10,
+                }}
+              />
+            ))}
+            {dataKeys.map((key, i) => (
+              <Line
+                key={key}
+                type="monotone"
+                dataKey={key}
+                name={key}
+                stroke={LINE_COLORS[i % LINE_COLORS.length]}
+                strokeWidth={2}
+                dot={false}
+                activeDot={{ r: 4 }}
+                animationDuration={600}
+              />
+            ))}
+            {refAreaLeft && refAreaRight && (
+              <ReferenceArea x1={refAreaLeft} x2={refAreaRight} strokeOpacity={0.3} fill="#6366f1" fillOpacity={0.15} />
+            )}
+            {!isZoomed && data.length > 1 && (
+              <Brush
+                dataKey="date"
+                height={24}
+                stroke="#6366f1"
+                fill="rgba(30, 41, 59, 0.35)"
+                travellerWidth={8}
+              />
+            )}
+          </LineChart>
+        ) : (
+          <div className="h-full min-h-0 animate-pulse rounded-lg bg-[var(--muted)]/30" />
+        )}
+      </div>
 
       {!isZoomed && data.length > 1 && (
         <p className="text-center text-[11px] text-[var(--muted-foreground)]">드래그하여 특정 구간을 확대할 수 있습니다</p>

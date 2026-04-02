@@ -6,6 +6,7 @@ import type {
   GetMergeRequestsOptions,
   GetPipelinesOptions,
 } from './_types';
+import { getGitlabApiOrigin } from './url';
 
 /** GitLab API 요청 실패 시 발생하는 커스텀 에러 */
 export class GitlabApiError extends Error {
@@ -82,7 +83,7 @@ function buildQueryString(params: Record<string, string | number | undefined>): 
  */
 export function createGitlabClient(config: GitlabConfig): GitlabClient {
   const { baseUrl, token, projectId } = config;
-  const apiBase = `${baseUrl.replace(/\/+$/, '')}/api/v4/projects/${encodeURIComponent(String(projectId))}`;
+  const apiBase = `${getGitlabApiOrigin(baseUrl)}/api/v4/projects/${encodeURIComponent(String(projectId))}`;
 
   /**
    * GitLab API에 인증된 GET 요청을 보냅니다.

@@ -1,33 +1,36 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useState, type ComponentType } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Menu, Settings, Users, X } from 'lucide-react';
+import { BookOpen, Home, Menu, Settings, Users, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/_ui/theme-toggle';
+import { useLoadingBar } from '@/components/_ui/loading-bar';
+import { ChangelogDialog } from '@/components/changelog/ChangelogDialog';
+import type { AppNavigationItem } from '@/lib/auth/roles';
 
-/** 사이드바 네비게이션 항목 정의 */
-interface NavItem {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
+const ICON_MAP = {
+  home: Home,
+  users: Users,
+  settings: Settings,
+  guide: BookOpen,
+} satisfies Record<AppNavigationItem['icon'], ComponentType<{ className?: string }>>;
+
+interface SidebarProps {
+  navigationItems: AppNavigationItem[];
+  version: string;
 }
-
-/** 사이드바 네비게이션 메뉴 목록 */
-const NAV_ITEMS: NavItem[] = [
-  { href: '/', label: '대시보드', icon: Home },
-  { href: '/developer', label: '개발자', icon: Users },
-  { href: '/settings', label: '설정', icon: Settings },
-];
 
 /**
  * 앱 사이드바 네비게이션 컴포넌트
  * @description 좌측 고정 사이드바로 주요 메뉴를 표시하며, 모바일에서는 햄버거 메뉴로 전환
  */
-export function Sidebar() {
+export function Sidebar({ navigationItems, version }: SidebarProps) {
   const pathname = usePathname();
+  const { start } = useLoadingBar();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isChangelogOpen, setIsChangelogOpen] = useState(false);
 
   const toggleMobile = useCallback(() => {
     setIsMobileOpen((prev) => !prev);
@@ -80,14 +83,17 @@ export function Sidebar() {
 
         {/* 네비게이션 */}
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {NAV_ITEMS.map((item) => {
+          {navigationItems.map((item) => {
             const active = isActive(item.href);
-            const Icon = item.icon;
+            const Icon = ICON_MAP[item.icon] ?? BookOpen;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                onClick={closeMobile}
+                onClick={() => {
+                  if (!active) start();
+                  closeMobile();
+                }}
                 className={cn(
                   'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
                   active
@@ -105,9 +111,18 @@ export function Sidebar() {
         {/* 하단: 테마 토글 + 정보 */}
         <div className="border-t px-4 py-3 space-y-3">
           <ThemeToggle />
-          <p className="text-xs text-[var(--muted-foreground)]">FE Team Scope v0.1</p>
+          <button
+            type="button"
+            onClick={() => setIsChangelogOpen(true)}
+            className="inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+          >
+            <span>FE Team Scope v{version}</span>
+            <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]/80">by TAEINN</span>
+          </button>
         </div>
       </aside>
+
+      <ChangelogDialog open={isChangelogOpen} onClose={() => setIsChangelogOpen(false)} />
     </>
   );
 }

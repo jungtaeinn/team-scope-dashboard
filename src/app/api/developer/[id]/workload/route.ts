@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireApiContext } from '@/lib/auth/api';
 import { prisma } from '@/lib/db';
 
 interface RouteParams {
@@ -31,8 +32,11 @@ function toMonthKey(dateLike: string | null | undefined): string | null {
  * GET /api/developer/[id]/workload
  * 개발자별 월 단위 계획/실제 공수를 반환합니다.
  */
-export async function GET(_request: Request, { params }: RouteParams) {
+export async function GET(request: Request, { params }: RouteParams) {
   try {
+    const authResult = await requireApiContext(request, ['owner', 'maintainer', 'developer']);
+    if (!authResult.ok) return authResult.response;
+
     const { id } = await params;
     if (!id) {
       return NextResponse.json(
@@ -42,7 +46,7 @@ export async function GET(_request: Request, { params }: RouteParams) {
     }
 
     const issues = await prisma.jiraIssue.findMany({
-      where: { assigneeId: id },
+      where: { workspaceId: authResult.context.workspace.id, assigneeId: id },
       select: {
         ganttStartDate: true,
         dueDate: true,

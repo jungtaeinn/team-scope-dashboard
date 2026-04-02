@@ -3,6 +3,31 @@ import type { JiraScoreBreakdown, ScoringWeights } from './_types';
 
 const DONE_STATUSES = ['done', 'closed', 'resolved', '완료', 'complete', '닫힘', '해결됨', '해결', '종료'];
 
+function parseDate(input: string | null | undefined) {
+  if (!input) return null;
+  const parsed = new Date(input);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function toMidnight(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+function getPlannedEffortHours(issue: ParsedJiraIssue) {
+  if (issue.plannedEffort != null && issue.plannedEffort > 0) return issue.plannedEffort;
+  return null;
+}
+
+function getActualEffortHours(issue: ParsedJiraIssue) {
+  if (issue.actualEffort != null && issue.actualEffort > 0) return issue.actualEffort;
+  if (issue.timeSpent != null && issue.timeSpent > 0) return issue.timeSpent / 3600;
+  return null;
+}
+
 /**
  * 티켓 완료율 점수를 산출합니다.
  * 전체 이슈 중 완료된 이슈의 비율을 기반으로 점수를 계산합니다.
@@ -20,13 +45,13 @@ export function calcTicketCompletionRate(issues: ParsedJiraIssue[]): number {
   const completed = issues.filter((issue) => DONE_STATUSES.includes(issue.status.toLowerCase()));
   const ratio = completed.length / issues.length;
 
-  return Math.round(ratio * 25 * 100) / 100;
+  return Math.round(clamp(ratio * 25, 0, 25) * 100) / 100;
 }
 
 /**
  * 일정 준수율 점수를 산출합니다.
- * WBSGantt 기준선(baseline) 대비 실제 완료일의 차이를 기반으로 점수를 계산합니다.
- * 기준선이 없는 이슈는 평가 대상에서 제외됩니다.
+ * WBSGantt 시작일/종료일 대비 현재 또는 완료 시점의 진행률 차이를 기반으로 점수를 계산합니다.
+ * Gantt 일정이 있는 이슈만 평가 대상이며, 완료 이슈는 100% 진행으로 간주합니다.
  *
  * @param issues - 파싱된 Jira 이슈 목록
  * @returns 0~25 사이의 점수
@@ -36,34 +61,51 @@ export function calcTicketCompletionRate(issues: ParsedJiraIssue[]): number {
  * ```
  */
 export function calcScheduleAdherence(issues: ParsedJiraIssue[]): number {
-  const evaluable = issues.filter((issue) => issue.baselineEnd && issue.ganttEndDate);
+  const evaluable = issues.filter((issue) => issue.ganttStartDate && issue.ganttEndDate);
   if (evaluable.length === 0) return 0;
 
-  let totalAdherence = 0;
-  for (const issue of evaluable) {
-    const baselineEnd = new Date(issue.baselineEnd!).getTime();
-    const actualEnd = new Date(issue.ganttEndDate!).getTime();
-    const diffDays = (actualEnd - baselineEnd) / (1000 * 60 * 60 * 24);
+  const nowTs = toMidnight(new Date()).getTime();
+  let totalScore = 0;
 
-    if (diffDays <= 0) {
-      totalAdherence += 1;
-    } else if (diffDays <= 3) {
-      totalAdherence += 0.7;
-    } else if (diffDays <= 7) {
-      totalAdherence += 0.4;
+  for (const issue of evaluable) {
+    const start = parseDate(issue.ganttStartDate);
+    const end = parseDate(issue.ganttEndDate);
+    if (!start || !end) continue;
+
+    const startTs = toMidnight(start).getTime();
+    const endTs = toMidnight(end).getTime();
+    const totalWindow = Math.max(endTs - startTs, 1000 * 60 * 60 * 24);
+
+    const resolutionTs = parseDate(issue.resolutionDate)?.getTime() ?? parseDate(issue.updated)?.getTime() ?? nowTs;
+    const referenceTs = DONE_STATUSES.includes(issue.status.toLowerCase())
+      ? Math.min(resolutionTs, endTs)
+      : Math.min(nowTs, endTs);
+
+    const expectedProgress = clamp((referenceTs - startTs) / totalWindow, 0, 1);
+    const actualProgress = DONE_STATUSES.includes(issue.status.toLowerCase())
+      ? 1
+      : clamp((issue.ganttProgress ?? 0) / 100, 0, 1);
+    const progressGap = actualProgress - expectedProgress;
+
+    if (progressGap >= -0.1) {
+      totalScore += 1;
+    } else if (progressGap >= -0.25) {
+      totalScore += 0.7;
+    } else if (progressGap >= -0.4) {
+      totalScore += 0.4;
     } else {
-      totalAdherence += 0.1;
+      totalScore += 0.1;
     }
   }
 
-  const ratio = totalAdherence / evaluable.length;
-  return Math.round(ratio * 25 * 100) / 100;
+  const ratio = totalScore / evaluable.length;
+  return Math.round(clamp(ratio * 25, 0, 25) * 100) / 100;
 }
 
 /**
  * 공수 정확도 점수를 산출합니다.
  * 계획 공수와 실제 투입 공수의 편차를 기반으로 점수를 계산합니다.
- * 편차가 작을수록 높은 점수를 받습니다.
+ * 계획 공수가 없으면 Gantt 기간(1일 = 8시간)으로, 실제 공수가 없으면 기록 시간으로 보완합니다.
  *
  * @param issues - 파싱된 Jira 이슈 목록
  * @returns 0~25 사이의 점수
@@ -72,14 +114,14 @@ export function calcScheduleAdherence(issues: ParsedJiraIssue[]): number {
  * const score = calcEffortAccuracy(issues); // 18.75
  * ```
  */
-export function calcEffortAccuracy(issues: ParsedJiraIssue[]): number {
-  const evaluable = issues.filter((issue) => issue.plannedEffort != null && issue.plannedEffort > 0);
-  if (evaluable.length === 0) return 0;
+export function calcEffortAccuracy(issues: ParsedJiraIssue[]): number | null {
+  const evaluable = issues.filter((issue) => getPlannedEffortHours(issue) != null && getActualEffortHours(issue) != null);
+  if (evaluable.length === 0) return null;
 
   let totalAccuracy = 0;
   for (const issue of evaluable) {
-    const planned = issue.plannedEffort!;
-    const actual = issue.actualEffort ?? 0;
+    const planned = getPlannedEffortHours(issue)!;
+    const actual = getActualEffortHours(issue)!;
     const deviation = Math.abs(actual - planned) / planned;
 
     if (deviation <= 0.1) {
@@ -94,13 +136,13 @@ export function calcEffortAccuracy(issues: ParsedJiraIssue[]): number {
   }
 
   const ratio = totalAccuracy / evaluable.length;
-  return Math.round(ratio * 25 * 100) / 100;
+  return Math.round(clamp(ratio * 25, 0, 25) * 100) / 100;
 }
 
 /**
  * 작업일지 성실도 점수를 산출합니다.
  * 이슈 대비 워크로그 기록 빈도를 기반으로 점수를 계산합니다.
- * 완료된 이슈에 워크로그가 있는 비율이 높을수록 높은 점수를 받습니다.
+ * 완료된 이슈에 워크로그 또는 기록 시간이 있는 비율이 높을수록 높은 점수를 받습니다.
  *
  * @param issues - 파싱된 Jira 이슈 목록
  * @param worklogs - 워크로그 데이터 목록 (issueKey 필드 필수)
@@ -110,15 +152,22 @@ export function calcEffortAccuracy(issues: ParsedJiraIssue[]): number {
  * const score = calcWorklogDiligence(issues, worklogs); // 21.0
  * ```
  */
-export function calcWorklogDiligence(issues: ParsedJiraIssue[], worklogs: any[]): number {
+export function calcWorklogDiligence(issues: ParsedJiraIssue[], worklogs: Array<{ issueKey: string }>): number | null {
   const completedIssues = issues.filter((issue) => DONE_STATUSES.includes(issue.status.toLowerCase()));
-  if (completedIssues.length === 0) return 0;
+  if (completedIssues.length === 0) return null;
 
   const worklogByIssue = new Set(worklogs.map((w) => w.issueKey as string));
-  const issuesWithWorklog = completedIssues.filter((issue) => worklogByIssue.has(issue.key));
+  const issuesWithWorklog = completedIssues.filter(
+    (issue) =>
+      worklogByIssue.has(issue.key) ||
+      (issue.timeSpent != null && issue.timeSpent > 0) ||
+      (issue.actualEffort != null && issue.actualEffort > 0),
+  );
+  if (issuesWithWorklog.length === 0 && completedIssues.every((issue) => (issue.timeSpent ?? 0) <= 0 && (issue.actualEffort ?? 0) <= 0)) {
+    return null;
+  }
   const ratio = issuesWithWorklog.length / completedIssues.length;
-
-  return Math.round(ratio * 25 * 100) / 100;
+  return Math.round(clamp(ratio * 25, 0, 25) * 100) / 100;
 }
 
 /**
@@ -140,7 +189,7 @@ export function calcWorklogDiligence(issues: ParsedJiraIssue[], worklogs: any[])
  */
 export function calculateJiraScore(
   issues: ParsedJiraIssue[],
-  worklogs: any[],
+  worklogs: Array<{ issueKey: string }>,
   weights: ScoringWeights['jira'],
 ): JiraScoreBreakdown {
   const rawCompletion = calcTicketCompletionRate(issues);
@@ -148,17 +197,33 @@ export function calculateJiraScore(
   const rawEffort = calcEffortAccuracy(issues);
   const rawWorklog = calcWorklogDiligence(issues, worklogs);
 
-  const ticketCompletionRate = (rawCompletion / 25) * weights.completion;
-  const scheduleAdherence = (rawSchedule / 25) * weights.schedule;
-  const effortAccuracy = (rawEffort / 25) * weights.effort;
-  const worklogDiligence = (rawWorklog / 25) * weights.worklog;
-  const total = Math.round((ticketCompletionRate + scheduleAdherence + effortAccuracy + worklogDiligence) * 100) / 100;
+  const activeWeights = [
+    weights.completion,
+    weights.schedule,
+    rawEffort == null ? 0 : weights.effort,
+    rawWorklog == null ? 0 : weights.worklog,
+  ];
+  const activeWeightTotal = activeWeights.reduce((sum, value) => sum + value, 0);
+
+  const toContribution = (score: number | null, max: number, weight: number) => {
+    if (score == null || activeWeightTotal <= 0 || weight <= 0) return 0;
+    return (score / max) * ((weight / activeWeightTotal) * 100);
+  };
+
+  const total = Math.round(
+    (
+      toContribution(rawCompletion, 25, weights.completion) +
+      toContribution(rawSchedule, 25, weights.schedule) +
+      toContribution(rawEffort, 25, weights.effort) +
+      toContribution(rawWorklog, 25, weights.worklog)
+    ) * 100,
+  ) / 100;
 
   return {
-    ticketCompletionRate: Math.round(ticketCompletionRate * 100) / 100,
-    scheduleAdherence: Math.round(scheduleAdherence * 100) / 100,
-    effortAccuracy: Math.round(effortAccuracy * 100) / 100,
-    worklogDiligence: Math.round(worklogDiligence * 100) / 100,
-    total,
+    ticketCompletionRate: Math.round(clamp(rawCompletion, 0, 25) * 100) / 100,
+    scheduleAdherence: Math.round(clamp(rawSchedule, 0, 25) * 100) / 100,
+    effortAccuracy: rawEffort == null ? null : Math.round(clamp(rawEffort, 0, 25) * 100) / 100,
+    worklogDiligence: rawWorklog == null ? null : Math.round(clamp(rawWorklog, 0, 25) * 100) / 100,
+    total: Math.round(clamp(total, 0, 100) * 100) / 100,
   };
 }

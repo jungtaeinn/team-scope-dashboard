@@ -60,6 +60,8 @@ const FIELD_LABELS: Record<string, string> = {
   created: '생성일',
   updated: '수정일',
   resolutiondate: '해결일',
+  duedate: '기한일',
+  timespent: '기록 시간',
 };
 
 /** Jira 표준 필드 목록 */
@@ -75,6 +77,8 @@ const STANDARD_FIELDS = [
   'created',
   'updated',
   'resolutiondate',
+  'duedate',
+  'timespent',
 ] as const;
 
 /** WBSGantt 커스텀 필드 목록 */

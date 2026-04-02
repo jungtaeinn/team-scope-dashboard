@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { MemberMappingForm, ProjectManagementForm, GroupManagementForm, ScoringWeightSlider } from '@/components/settings';
 import { Users, FolderGit2, Layers, SlidersHorizontal } from 'lucide-react';
 
 /** 탭 정의 */
@@ -15,12 +16,42 @@ const TABS = [
 
 type TabId = (typeof TABS)[number]['id'];
 
+function normalizeTab(value: string | null): TabId {
+  if (value && TABS.some((tab) => tab.id === value)) {
+    return value as TabId;
+  }
+  return 'members';
+}
+
+function SettingsTabSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="h-10 animate-pulse rounded-xl bg-[var(--muted)]" />
+      <div className="h-40 animate-pulse rounded-xl bg-[var(--muted)]" />
+      <div className="h-64 animate-pulse rounded-xl bg-[var(--muted)]" />
+    </div>
+  );
+}
+
 /** 탭 ID에 해당하는 컴포넌트 매핑 */
 const TAB_COMPONENTS: Record<TabId, React.ComponentType> = {
-  members: MemberMappingForm,
-  projects: ProjectManagementForm,
-  groups: GroupManagementForm,
-  scoring: ScoringWeightSlider,
+  members: dynamic(
+    () => import('@/components/settings/_components/MemberMappingForm').then((module) => module.MemberMappingForm),
+    { loading: () => <SettingsTabSkeleton /> },
+  ),
+  projects: dynamic(
+    () =>
+      import('@/components/settings/_components/ProjectManagementForm').then((module) => module.ProjectManagementForm),
+    { loading: () => <SettingsTabSkeleton /> },
+  ),
+  groups: dynamic(
+    () => import('@/components/settings/_components/GroupManagementForm').then((module) => module.GroupManagementForm),
+    { loading: () => <SettingsTabSkeleton /> },
+  ),
+  scoring: dynamic(
+    () => import('@/components/settings/_components/ScoringWeightSlider').then((module) => module.ScoringWeightSlider),
+    { loading: () => <SettingsTabSkeleton /> },
+  ),
 };
 
 /**
@@ -28,7 +59,15 @@ const TAB_COMPONENTS: Record<TabId, React.ComponentType> = {
  * 탭 기반으로 멤버 매핑, 프로젝트 관리, 그룹 관리, 스코어링 가중치 설정을 제공합니다.
  */
 export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<TabId>('members');
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const urlTab = normalizeTab(searchParams.get('tab'));
+  const [activeTab, setActiveTab] = useState<TabId>(urlTab);
+
+  useEffect(() => {
+    setActiveTab(urlTab);
+  }, [urlTab]);
 
   const ActiveComponent = TAB_COMPONENTS[activeTab];
 
@@ -51,7 +90,12 @@ export default function SettingsPage() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => {
+                  setActiveTab(tab.id);
+                  const next = new URLSearchParams(searchParams.toString());
+                  next.set('tab', tab.id);
+                  router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+                }}
                 className={cn(
                   'flex items-center gap-2 whitespace-nowrap border-b-2 px-1 py-3 text-sm font-medium transition-colors',
                   isActive

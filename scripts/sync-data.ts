@@ -1,22 +1,14 @@
 import dotenv from 'dotenv';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import path from 'node:path';
+import { DEFAULT_WORKSPACE_ID } from '@/lib/app-info';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
-function resolveSqlitePath(databaseUrl: string) {
-  if (!databaseUrl.startsWith('file:')) {
-    return databaseUrl;
-  }
-
-  const filePath = databaseUrl.slice('file:'.length);
-  return path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
-}
-
-const databaseUrl = process.env.DATABASE_URL ?? 'file:./dev.db';
-const adapter = new PrismaBetterSqlite3({ url: resolveSqlitePath(databaseUrl) });
+const connectionString = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/team_scope?schema=public';
+const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
 
 const JIRA_BASE = process.env.JIRA_BASE_URL!;
@@ -26,9 +18,61 @@ const GITLAB_BASE = process.env.GITLAB_BASE_URL!;
 const GITLAB_TOKEN = process.env.GITLAB_PAT!;
 const GITLAB_PROJECT_ID = process.env.GITLAB_PROJECT_ID!;
 
+interface JiraSearchResponse {
+  total?: number;
+  issues?: JiraIssueResponse[];
+}
+
+interface JiraIssueResponse {
+  key: string;
+  fields: {
+    summary?: string | null;
+    status?: { name?: string | null } | null;
+    issuetype?: { name?: string | null } | null;
+    assignee?: { name?: string | null } | null;
+    priority?: { name?: string | null } | null;
+    timespent?: number | null;
+    duedate?: string | null;
+    customfield_10106?: number | string | null;
+    customfield_10332?: string | null;
+    customfield_10333?: string | null;
+    customfield_10334?: string | null;
+    customfield_10335?: string | null;
+    customfield_10336?: number | string | null;
+    customfield_11728?: number | string | null;
+    customfield_11731?: number | string | null;
+    customfield_11480?: number | string | null;
+  };
+}
+
+interface GitlabMergeRequestResponse {
+  iid: number;
+  title: string;
+  state: string;
+  author?: { username?: string | null } | null;
+  user_notes_count?: number | null;
+  changes_count?: number | string | null;
+  additions?: number | null;
+  deletions?: number | null;
+  source_branch?: string | null;
+  target_branch?: string | null;
+  created_at?: string | null;
+  merged_at?: string | null;
+}
+
+interface GitlabNoteResponse {
+  id: number;
+  body?: string | null;
+  system?: boolean | null;
+  author?: { username?: string | null } | null;
+  resolvable?: boolean | null;
+  resolved?: boolean | null;
+  created_at?: string | null;
+}
+
 // ======================== Jira ========================
 
-async function jiraFetch(path: string): Promise<any> {
+async function jiraFetch<T>(path: string): Promise<T | null> {
   const res = await fetch(`${JIRA_BASE}${path}`, {
     headers: { Authorization: `Bearer ${JIRA_TOKEN}`, Accept: 'application/json' },
   });
@@ -36,14 +80,16 @@ async function jiraFetch(path: string): Promise<any> {
     console.warn(`  [Jira] ${res.status} ${res.statusText} — ${path.slice(0, 80)}`);
     return null;
   }
-  return res.json();
+  return (await res.json()) as T;
 }
 
 async function syncJiraIssues(projectId: string) {
   console.log('\n📋 Jira 이슈 동기화 시작...');
 
-  const developers = await prisma.developer.findMany({ where: { isActive: true } }) as any[];
-  const devByJira = new Map(developers.filter((d: any) => d.jiraUsername).map((d: any) => [d.jiraUsername!.toUpperCase(), d.id]));
+  const developers = await prisma.developer.findMany({ where: { workspaceId: DEFAULT_WORKSPACE_ID, isActive: true } });
+  const devByJira = new Map(
+    developers.filter((d) => d.jiraUsername).map((d) => [d.jiraUsername!.toUpperCase(), d.id]),
+  );
 
   let totalSynced = 0;
 
@@ -57,7 +103,7 @@ async function syncJiraIssues(projectId: string) {
       'customfield_10106,customfield_10332,customfield_10333,customfield_10334,customfield_10335,' +
       'customfield_10336,customfield_11728,customfield_11731,customfield_11480';
 
-    const data = await jiraFetch(`/rest/api/2/search?jql=${jql}&maxResults=100&fields=${fields}`);
+    const data = await jiraFetch<JiraSearchResponse>(`/rest/api/2/search?jql=${jql}&maxResults=100&fields=${fields}`);
     if (!data?.issues) {
       console.log(`  ${dev.name}: 이슈 없음 또는 조회 실패`);
       continue;
@@ -90,9 +136,9 @@ async function syncJiraIssues(projectId: string) {
       };
 
       await prisma.jiraIssue.upsert({
-        where: { issueKey_projectId: { issueKey: issue.key, projectId } },
+        where: { workspaceId_issueKey_projectId: { workspaceId: DEFAULT_WORKSPACE_ID, issueKey: issue.key, projectId } },
         update: { ...issueData, syncedAt: new Date() },
-        create: { issueKey: issue.key, projectId, ...issueData },
+        create: { workspaceId: DEFAULT_WORKSPACE_ID, issueKey: issue.key, projectId, ...issueData },
       });
       count++;
     }
@@ -107,7 +153,7 @@ async function syncJiraIssues(projectId: string) {
 
 // ======================== GitLab ========================
 
-async function gitlabFetch(path: string): Promise<any> {
+async function gitlabFetch<T>(path: string): Promise<T | null> {
   const res = await fetch(`${GITLAB_BASE}/api/v4${path}`, {
     headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN },
   });
@@ -115,14 +161,16 @@ async function gitlabFetch(path: string): Promise<any> {
     console.warn(`  [GitLab] ${res.status} ${res.statusText} — ${path.slice(0, 80)}`);
     return null;
   }
-  return res.json();
+  return (await res.json()) as T;
 }
 
 async function syncGitlabMRs(projectId: string) {
   console.log('\n🔀 GitLab MR 동기화 시작...');
 
-  const developers = await prisma.developer.findMany({ where: { isActive: true } }) as any[];
-  const devByGitlab = new Map(developers.filter((d: any) => d.gitlabUsername).map((d: any) => [d.gitlabUsername!, d.id]));
+  const developers = await prisma.developer.findMany({ where: { workspaceId: DEFAULT_WORKSPACE_ID, isActive: true } });
+  const devByGitlab = new Map(
+    developers.filter((d) => d.gitlabUsername).map((d) => [d.gitlabUsername!, d.id]),
+  );
 
   let totalMRs = 0;
   let totalNotes = 0;
@@ -134,8 +182,8 @@ async function syncGitlabMRs(projectId: string) {
     since.setMonth(since.getMonth() - 3);
     const sinceStr = since.toISOString().slice(0, 10);
 
-    const mrs = await gitlabFetch(
-      `/projects/${GITLAB_PROJECT_ID}/merge_requests?author_username=${dev.gitlabUsername}&state=all&per_page=100&created_after=${sinceStr}`
+    const mrs = await gitlabFetch<GitlabMergeRequestResponse[]>(
+      `/projects/${GITLAB_PROJECT_ID}/merge_requests?author_username=${dev.gitlabUsername}&state=all&per_page=100&created_after=${sinceStr}`,
     );
     if (!mrs || !Array.isArray(mrs)) {
       console.log(`  ${dev.name}: MR 없음 또는 조회 실패`);
@@ -146,10 +194,19 @@ async function syncGitlabMRs(projectId: string) {
     let noteCount = 0;
 
     for (const mr of mrs) {
-      const authorId = devByGitlab.get(mr.author?.username) ?? null;
+      if (!mr.created_at) continue;
+      const authorUsername = mr.author?.username ?? null;
+      const authorId = authorUsername ? (devByGitlab.get(authorUsername) ?? null) : null;
 
       const mrRecord = await prisma.gitlabMR.upsert({
-        where: { mrIid_projectId: { mrIid: mr.iid, projectId } },
+        where: {
+          workspaceId_mrIid_projectId_sourceProjectKey: {
+            workspaceId: DEFAULT_WORKSPACE_ID,
+            mrIid: mr.iid,
+            projectId,
+            sourceProjectKey: String(GITLAB_PROJECT_ID),
+          },
+        },
         update: {
           title: mr.title,
           state: mr.state,
@@ -158,12 +215,16 @@ async function syncGitlabMRs(projectId: string) {
           changesCount: mr.changes_count != null ? parseInt(String(mr.changes_count), 10) : null,
           additions: mr.additions ?? null,
           deletions: mr.deletions ?? null,
-          sourceBranch: mr.source_branch,
-          targetBranch: mr.target_branch,
-          mrMergedAt: mr.merged_at,
+          sourceBranch: mr.source_branch ?? null,
+          targetBranch: mr.target_branch ?? null,
+          sourceProjectKey: String(GITLAB_PROJECT_ID),
+          sourceProjectName: null,
+          sourceProjectWebUrl: null,
+          mrMergedAt: mr.merged_at ?? null,
           syncedAt: new Date(),
         },
         create: {
+          workspaceId: DEFAULT_WORKSPACE_ID,
           mrIid: mr.iid,
           title: mr.title,
           state: mr.state,
@@ -173,32 +234,38 @@ async function syncGitlabMRs(projectId: string) {
           changesCount: mr.changes_count != null ? parseInt(String(mr.changes_count), 10) : null,
           additions: mr.additions ?? null,
           deletions: mr.deletions ?? null,
-          sourceBranch: mr.source_branch,
-          targetBranch: mr.target_branch,
+          sourceBranch: mr.source_branch ?? null,
+          targetBranch: mr.target_branch ?? null,
+          sourceProjectKey: String(GITLAB_PROJECT_ID),
+          sourceProjectName: null,
+          sourceProjectWebUrl: null,
           mrCreatedAt: mr.created_at,
-          mrMergedAt: mr.merged_at,
+          mrMergedAt: mr.merged_at ?? null,
         },
       });
       mrCount++;
 
       // MR 노트(코멘트) 수집
-      const notes = await gitlabFetch(
-        `/projects/${GITLAB_PROJECT_ID}/merge_requests/${mr.iid}/notes?per_page=100`
+      const notes = await gitlabFetch<GitlabNoteResponse[]>(
+        `/projects/${GITLAB_PROJECT_ID}/merge_requests/${mr.iid}/notes?per_page=100`,
       );
       if (notes && Array.isArray(notes)) {
         for (const note of notes) {
           if (note.system) continue; // 시스템 노트 제외
+          if (!note.created_at) continue;
 
-          const noteAuthorId = devByGitlab.get(note.author?.username) ?? null;
+          const noteAuthorUsername = note.author?.username ?? null;
+          const noteAuthorId = noteAuthorUsername ? (devByGitlab.get(noteAuthorUsername) ?? null) : null;
 
           await prisma.gitlabNote.upsert({
-            where: { noteId_mrId: { noteId: note.id, mrId: mrRecord.id } },
+            where: { workspaceId_noteId_mrId: { workspaceId: DEFAULT_WORKSPACE_ID, noteId: note.id, mrId: mrRecord.id } },
             update: {
               body: note.body?.slice(0, 2000) ?? '',
               isResolvable: note.resolvable ?? false,
               isResolved: note.resolved ?? false,
             },
             create: {
+              workspaceId: DEFAULT_WORKSPACE_ID,
               noteId: note.id,
               mrId: mrRecord.id,
               body: note.body?.slice(0, 2000) ?? '',
@@ -237,7 +304,7 @@ async function main() {
 
   // 동기화 로그 시작
   const syncLog = await prisma.syncLog.create({
-    data: { projectId: jiraProjectId, status: 'running', message: '전체 동기화 시작' },
+    data: { workspaceId: DEFAULT_WORKSPACE_ID, projectId: jiraProjectId, status: 'running', message: '전체 동기화 시작' },
   });
 
   try {
@@ -274,4 +341,6 @@ main()
     console.error('동기화 실패:', e);
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

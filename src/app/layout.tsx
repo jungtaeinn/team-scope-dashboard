@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
-import { Sidebar } from '@/components/_ui';
 import { Providers } from './providers';
 import './globals.css';
 
@@ -17,7 +16,31 @@ const geistMono = Geist_Mono({
 /** 앱 메타데이터 */
 export const metadata: Metadata = {
   title: 'TeamScope - 개발자 성과 대시보드',
-  description: '프론트엔드 개발팀의 Jira·GitLab 활동 기반 성과 지표를 시각화하는 대시보드',
+  description: '프로젝트와 담당자 기준으로 Jira·GitLab 활동 기반 성과 지표를 시각화하는 대시보드',
+  icons: {
+    icon: [
+      { url: '/icons/icon_16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/icons/icon_16x16@2x.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icons/icon_32x32.png', sizes: '32x32', type: 'image/png' },
+      { url: '/icons/icon_32x32@2x.png', sizes: '64x64', type: 'image/png' },
+      { url: '/icons/icon_64x64.png', sizes: '64x64', type: 'image/png' },
+      { url: '/icons/icon_64x64@2x.png', sizes: '128x128', type: 'image/png' },
+      { url: '/icons/icon_128x128.png', sizes: '128x128', type: 'image/png' },
+      { url: '/icons/icon_128x128@2x.png', sizes: '256x256', type: 'image/png' },
+      { url: '/icons/icon_256x256.png', sizes: '256x256', type: 'image/png' },
+      { url: '/icons/icon_256x256@2x.png', sizes: '512x512', type: 'image/png' },
+      { url: '/icons/icon_512x512.png', sizes: '512x512', type: 'image/png' },
+      { url: '/icons/icon_512x512@2x.png', sizes: '1024x1024', type: 'image/png' },
+    ],
+    shortcut: [
+      { url: '/icons/icon_16x16.png', sizes: '16x16', type: 'image/png' },
+      { url: '/icons/icon_32x32.png', sizes: '32x32', type: 'image/png' },
+    ],
+    apple: [
+      { url: '/icons/icon_128x128@2x.png', sizes: '256x256', type: 'image/png' },
+      { url: '/icons/icon_256x256@2x.png', sizes: '512x512', type: 'image/png' },
+    ],
+  },
 };
 
 /**
@@ -28,12 +51,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="ko" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <Providers>
-          <Sidebar />
-          <main className="min-h-screen pl-0 lg:pl-[var(--sidebar-width)]">
-            <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</div>
-          </main>
-        </Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

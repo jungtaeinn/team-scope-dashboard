@@ -7,7 +7,9 @@ import { cn } from '@/lib/utils';
 import { getGrade, getGradeColor } from '@/lib/utils/number-format';
 import { TeamRadarChart, ScoreGauge, GanttChart, type RadarDataRow } from '@/components/charts';
 import { ScoreBreakdown, JiraTicketList, MergeRequestList, WorkloadComparison } from '@/components/developer-detail';
-import { useDeveloperScores, useExport, useGanttData } from '@/hooks';
+import { useLoadingBar } from '@/components/_ui/loading-bar';
+import { useDashboardInsights, useExport, useGanttData } from '@/hooks';
+import { useFilterParams } from '@/hooks/use-filter-params';
 
 type TabId = 'gantt' | 'tickets' | 'mrs' | 'workload';
 
@@ -25,22 +27,29 @@ const TABS: { id: TabId; label: string }[] = [
 export default function DeveloperDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const { start } = useLoadingBar();
   const [activeTab, setActiveTab] = useState<TabId>('gantt');
   const { exportToExcel, isExporting } = useExport();
+  const { period, projects } = useFilterParams();
 
-  const { data: scores, isLoading: isScoresLoading } = useDeveloperScores({ developerIds: [params.id] });
+  const { data: insights, isLoading: isScoresLoading } = useDashboardInsights({
+    from: period.from,
+    to: period.to,
+    developerIds: [params.id],
+    projectIds: projects.length ? projects : undefined,
+  });
   const { data: ganttData, isLoading: isGanttLoading } = useGanttData({ developerIds: [params.id] });
 
   const profile = useMemo(() => {
-    if (!scores?.length) return null;
-    const s = scores[0];
+    const s = insights?.developerDetails?.[0];
+    if (!s) return null;
     return {
-      name: s.developerName,
-      compositeScore: Math.round(s.score.composite * 100) / 100,
-      jira: s.score.jira ?? { ticketCompletionRate: 0, scheduleAdherence: 0, effortAccuracy: 0, worklogDiligence: 0, total: 0 },
-      gitlab: s.score.gitlab ?? { mrProductivity: 0, reviewParticipation: 0, feedbackResolution: 0, mrLeadTime: 0, ciPassRate: 0, total: 0 },
+      name: s.name,
+      compositeScore: Math.round(s.compositeScore * 100) / 100,
+      jira: s.jira ?? { ticketCompletionRate: 0, scheduleAdherence: 0, effortAccuracy: null, worklogDiligence: null, total: 0 },
+      gitlab: s.gitlab ?? { mrProductivity: 0, reviewParticipation: 0, feedbackResolution: 0, mrLeadTime: 0, ciPassRate: 0, total: 0 },
     };
-  }, [scores]);
+  }, [insights?.developerDetails]);
 
   const grade = profile ? getGrade(profile.compositeScore) : 'F';
   const gradeColor = profile ? getGradeColor(grade) : '';
@@ -52,23 +61,24 @@ export default function DeveloperDetailPage() {
       { category: '일정 준수율', [profile.name]: (profile.jira.scheduleAdherence / 25) * 100 },
       { category: 'MR 생산성', [profile.name]: (profile.gitlab.mrProductivity / 20) * 100 },
       { category: '코드 리뷰', [profile.name]: (profile.gitlab.reviewParticipation / 25) * 100 },
-      { category: '공수 정확도', [profile.name]: (profile.jira.effortAccuracy / 25) * 100 },
+      { category: '공수 정확도', [profile.name]: ((profile.jira.effortAccuracy ?? 0) / 25) * 100 },
       { category: 'CI 통과율', [profile.name]: (profile.gitlab.ciPassRate / 15) * 100 },
     ];
   }, [profile]);
 
   const handleGoBack = useCallback(() => {
-    router.push('/');
-  }, [router]);
+    start();
+    router.push('/developer');
+  }, [router, start]);
 
   const handleExportDeveloperReport = useCallback(async () => {
     await exportToExcel({
       scope: 'developers',
       developerIds: [params.id],
       sheets: ['developerDetail', 'jiraIssues', 'gitlabMrs'],
-      period: scores?.[0]?.score.period,
+      period: period.to.slice(0, 7),
     });
-  }, [exportToExcel, params.id, scores]);
+  }, [exportToExcel, params.id, period.to]);
 
   const gradeBgMap: Record<string, string> = {
     A: 'bg-emerald-50',
@@ -91,7 +101,7 @@ export default function DeveloperDetailPage() {
       <div className="space-y-4">
         <button type="button" onClick={handleGoBack}
           className="flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)]">
-          <ArrowLeft className="h-4 w-4" /> 대시보드로 돌아가기
+          <ArrowLeft className="h-4 w-4" /> 개발자 목록으로 돌아가기
         </button>
         <div className="flex h-40 items-center justify-center rounded-xl border text-[var(--muted-foreground)]">
           개발자 데이터를 찾을 수 없습니다.

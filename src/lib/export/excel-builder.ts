@@ -54,6 +54,14 @@ function buildSheet(columns: SheetColumn[], data: Record<string, unknown>[]): XL
   return ws;
 }
 
+function formatOptionalScore(value: number | null | undefined) {
+  return value == null ? '미평가' : value;
+}
+
+function formatOptionalPercentage(value: number | null | undefined, max: number) {
+  return value == null ? '미평가' : ((value / max) * 100).toFixed(1);
+}
+
 /**
  * 팀 전체 요약 시트를 생성합니다.
  * @param data - 개발자별 요약 데이터 배열
@@ -92,8 +100,8 @@ export function buildDeveloperDetailSheet({ developerName, scores }: DeveloperDe
     { category: '[Jira]', score: scores.jira.total, maxScore: 100, percentage: scores.jira.total, description: '' },
     { category: '  티켓 완료율', score: scores.jira.ticketCompletionRate, maxScore: 25, percentage: ((scores.jira.ticketCompletionRate / 25) * 100).toFixed(1), description: '' },
     { category: '  일정 준수율', score: scores.jira.scheduleAdherence, maxScore: 25, percentage: ((scores.jira.scheduleAdherence / 25) * 100).toFixed(1), description: '' },
-    { category: '  공수 정확도', score: scores.jira.effortAccuracy, maxScore: 25, percentage: ((scores.jira.effortAccuracy / 25) * 100).toFixed(1), description: '' },
-    { category: '  작업일지 성실도', score: scores.jira.worklogDiligence, maxScore: 25, percentage: ((scores.jira.worklogDiligence / 25) * 100).toFixed(1), description: '' },
+    { category: '  공수 정확도', score: formatOptionalScore(scores.jira.effortAccuracy), maxScore: 25, percentage: formatOptionalPercentage(scores.jira.effortAccuracy, 25), description: scores.jira.effortAccuracy == null ? '관련 공수 데이터가 없어 미평가' : '' },
+    { category: '  작업일지 성실도', score: formatOptionalScore(scores.jira.worklogDiligence), maxScore: 25, percentage: formatOptionalPercentage(scores.jira.worklogDiligence, 25), description: scores.jira.worklogDiligence == null ? '기록 시간/워크로그 데이터가 없어 미평가' : '' },
     { category: '[GitLab]', score: scores.gitlab.total, maxScore: 100, percentage: scores.gitlab.total, description: '' },
     { category: '  MR 생산성', score: scores.gitlab.mrProductivity, maxScore: 20, percentage: ((scores.gitlab.mrProductivity / 20) * 100).toFixed(1), description: '' },
     { category: '  코드 리뷰 참여도', score: scores.gitlab.reviewParticipation, maxScore: 25, percentage: ((scores.gitlab.reviewParticipation / 25) * 100).toFixed(1), description: '' },

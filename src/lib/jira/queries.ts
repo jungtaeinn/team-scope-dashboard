@@ -187,6 +187,8 @@ export function parseJiraIssue(
     created: fields.created,
     updated: fields.updated,
     resolutionDate: fields.resolutiondate ?? null,
+    dueDate: fields.duedate ?? null,
+    timeSpent: typeof fields.timespent === 'number' ? fields.timespent : null,
   };
 }
 

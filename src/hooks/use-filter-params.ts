@@ -2,8 +2,8 @@
 
 import { useQueryStates, parseAsString, parseAsArrayOf } from 'nuqs';
 import { useMemo, useCallback } from 'react';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
 import type { DateRange } from '@/common/types';
+import { getDefaultRecentRange } from '@/components/filters/date-range-filter/DateRangeFilter';
 
 /** useFilterParams 반환 타입 */
 interface FilterParams {
@@ -33,9 +33,9 @@ interface FilterParams {
  * @returns 필터 파라미터 및 setter 함수
  */
 export function useFilterParams(): FilterParams {
-  const now = new Date();
-  const defaultFrom = format(startOfMonth(now), 'yyyy-MM-dd');
-  const defaultTo = format(endOfMonth(now), 'yyyy-MM-dd');
+  const defaultRange = getDefaultRecentRange();
+  const defaultFrom = defaultRange.from;
+  const defaultTo = defaultRange.to;
 
   const [params, setParams] = useQueryStates({
     from: parseAsString.withDefault(defaultFrom),

@@ -1,10 +1,19 @@
+import type { GitlabScoreBreakdown, ScoringWeights } from './_types';
 import type { ParsedMergeRequest, ParsedNote } from '@/lib/gitlab/_types';
 
 /** MR과 연관된 노트를 함께 전달하기 위한 확장 타입 */
 type MRWithNotes = ParsedMergeRequest & { notes?: ParsedNote[] };
-import type { GitlabScoreBreakdown, ScoringWeights } from './_types';
+type ReviewActivity = {
+  mrId: string;
+  isSystem: boolean;
+};
+type PipelineStatus = { status: string };
 
 const SECONDS_PER_HOUR = 3600;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
 
 /**
  * MR 생산성 점수를 산출합니다.
@@ -25,7 +34,7 @@ export function calcMRProductivity(mrs: ParsedMergeRequest[], teamAvg: number): 
 
   const ratio = Math.min(mergedCount / teamAvg, 1.5);
   const score = Math.min((ratio / 1.0) * 20, 20);
-  return Math.round(score * 100) / 100;
+  return Math.round(clamp(score, 0, 20) * 100) / 100;
 }
 
 /**
@@ -40,7 +49,7 @@ export function calcMRProductivity(mrs: ParsedMergeRequest[], teamAvg: number): 
  * const score = calcReviewParticipation(notes); // 22.5
  * ```
  */
-export function calcReviewParticipation(reviewActivity: any[]): number {
+export function calcReviewParticipation(reviewActivity: ReviewActivity[]): number {
   if (reviewActivity.length === 0) return 0;
 
   const reviewedMrIds = new Set<string>();
@@ -61,7 +70,7 @@ export function calcReviewParticipation(reviewActivity: any[]): number {
 
   const maxExpected = 300;
   const normalizedScore = Math.min(rawPoints / maxExpected, 1) * 25;
-  return Math.round(normalizedScore * 100) / 100;
+  return Math.round(clamp(normalizedScore, 0, 25) * 100) / 100;
 }
 
 /**
@@ -91,10 +100,10 @@ export function calcFeedbackResolution(mrs: MRWithNotes[]): number {
     }
   }
 
-  if (totalResolvable === 0) return 0;
+  if (totalResolvable === 0) return 20;
 
   const ratio = totalResolved / totalResolvable;
-  return Math.round(ratio * 20 * 100) / 100;
+  return Math.round(clamp(ratio * 20, 0, 20) * 100) / 100;
 }
 
 /**
@@ -130,7 +139,7 @@ export function calcMRLeadTime(mrs: ParsedMergeRequest[]): number {
   }
 
   const ratio = totalScore / mergedMrs.length;
-  return Math.round(ratio * 20 * 100) / 100;
+  return Math.round(clamp(ratio * 20, 0, 20) * 100) / 100;
 }
 
 /**
@@ -144,13 +153,13 @@ export function calcMRLeadTime(mrs: ParsedMergeRequest[]): number {
  * const score = calcCIPassRate(pipelines); // 13.5
  * ```
  */
-export function calcCIPassRate(pipelines: any[]): number {
-  if (pipelines.length === 0) return 0;
+export function calcCIPassRate(pipelines: PipelineStatus[]): number {
+  if (pipelines.length === 0) return 15;
 
   const successful = pipelines.filter((p) => p.status === 'success');
   const ratio = successful.length / pipelines.length;
 
-  return Math.round(ratio * 15 * 100) / 100;
+  return Math.round(clamp(ratio * 15, 0, 15) * 100) / 100;
 }
 
 /**
@@ -174,11 +183,12 @@ export function calcCIPassRate(pipelines: any[]): number {
  */
 export function calculateGitlabScore(
   mrs: MRWithNotes[],
-  reviewActivity: any[],
-  pipelines: any[],
+  reviewActivity: ReviewActivity[],
+  pipelines: PipelineStatus[],
   weights: ScoringWeights['gitlab'],
+  teamAvgMergedMrs?: number,
 ): GitlabScoreBreakdown {
-  const teamAvg = mrs.filter((mr) => mr.state === 'merged').length;
+  const teamAvg = teamAvgMergedMrs ?? mrs.filter((mr) => mr.state === 'merged').length;
 
   const rawProductivity = calcMRProductivity(mrs, teamAvg || 1);
   const rawReview = calcReviewParticipation(reviewActivity);
@@ -186,20 +196,29 @@ export function calculateGitlabScore(
   const rawLeadTime = calcMRLeadTime(mrs);
   const rawCiPass = calcCIPassRate(pipelines);
 
-  const mrProductivity = (rawProductivity / 20) * weights.mrProductivity;
-  const reviewParticipation = (rawReview / 25) * weights.reviewParticipation;
-  const feedbackResolution = (rawFeedback / 20) * weights.feedbackResolution;
-  const mrLeadTime = (rawLeadTime / 20) * weights.leadTime;
-  const ciPassRate = (rawCiPass / 15) * weights.ciPassRate;
-  const total =
-    Math.round((mrProductivity + reviewParticipation + feedbackResolution + mrLeadTime + ciPassRate) * 100) / 100;
+  const totalWeight =
+    weights.mrProductivity +
+    weights.reviewParticipation +
+    weights.feedbackResolution +
+    weights.leadTime +
+    weights.ciPassRate;
+
+  const total = Math.round(
+    (
+      (rawProductivity / 20) * (weights.mrProductivity / totalWeight) * 100 +
+      (rawReview / 25) * (weights.reviewParticipation / totalWeight) * 100 +
+      (rawFeedback / 20) * (weights.feedbackResolution / totalWeight) * 100 +
+      (rawLeadTime / 20) * (weights.leadTime / totalWeight) * 100 +
+      (rawCiPass / 15) * (weights.ciPassRate / totalWeight) * 100
+    ) * 100,
+  ) / 100;
 
   return {
-    mrProductivity: Math.round(mrProductivity * 100) / 100,
-    reviewParticipation: Math.round(reviewParticipation * 100) / 100,
-    feedbackResolution: Math.round(feedbackResolution * 100) / 100,
-    mrLeadTime: Math.round(mrLeadTime * 100) / 100,
-    ciPassRate: Math.round(ciPassRate * 100) / 100,
-    total,
+    mrProductivity: Math.round(clamp(rawProductivity, 0, 20) * 100) / 100,
+    reviewParticipation: Math.round(clamp(rawReview, 0, 25) * 100) / 100,
+    feedbackResolution: Math.round(clamp(rawFeedback, 0, 20) * 100) / 100,
+    mrLeadTime: Math.round(clamp(rawLeadTime, 0, 20) * 100) / 100,
+    ciPassRate: Math.round(clamp(rawCiPass, 0, 15) * 100) / 100,
+    total: Math.round(clamp(total, 0, 100) * 100) / 100,
   };
 }

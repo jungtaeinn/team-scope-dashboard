@@ -29,6 +29,8 @@ export interface WidgetContainerProps {
   style?: React.CSSProperties;
   /** 콘텐츠 스크롤 허용 여부 */
   contentScrollable?: boolean;
+  /** 헤더 우측 액션 */
+  headerAction?: ReactNode;
 }
 
 /**
@@ -49,6 +51,7 @@ export const WidgetContainer = forwardRef<HTMLDivElement, WidgetContainerProps>(
     className,
     style,
     contentScrollable = true,
+    headerAction,
     ...rest
   },
   ref,
@@ -108,7 +111,7 @@ export const WidgetContainer = forwardRef<HTMLDivElement, WidgetContainerProps>(
               <div className="fixed inset-0 z-40" onClick={() => setIsMenuOpen(false)} aria-hidden="true" />
               <div
                 className={cn(
-                  'absolute right-0 top-full z-50 mt-1 min-w-[140px] rounded-md border bg-popover py-1 shadow-lg',
+                  'absolute right-0 top-full z-[70] mt-2 min-w-[160px] rounded-lg border border-border bg-[var(--popover)] py-1.5 shadow-2xl ring-1 ring-black/10',
                   'animate-in fade-in-0 zoom-in-95',
                 )}
                 role="menu"
@@ -156,6 +159,8 @@ export const WidgetContainer = forwardRef<HTMLDivElement, WidgetContainerProps>(
             </>
           )}
         </div>
+
+        {headerAction ? <div className="shrink-0">{headerAction}</div> : null}
       </div>
 
       {/* 위젯 콘텐츠 */}

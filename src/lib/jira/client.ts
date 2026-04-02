@@ -4,8 +4,8 @@ import type {
   JiraSearchResponse,
   JiraWorklogResponse,
   JiraBoardResponse,
-  JiraSprintResponse,
   JiraFieldMeta,
+  JiraAssignableUser,
 } from '@/lib/jira/_types';
 import { JIRA_FIELDS_TO_FETCH } from '@/lib/jira/fields';
 
@@ -52,6 +52,13 @@ export interface JiraClient {
    * @returns 필드 배열
    */
   getFields(): Promise<JiraFieldMeta[]>;
+
+  /**
+   * 프로젝트에 할당 가능한 사용자 목록을 조회합니다.
+   * @param projectKey - 프로젝트 키
+   * @param maxResults - 최대 결과 수
+   */
+  searchAssignableUsers(projectKey: string, maxResults?: number): Promise<JiraAssignableUser[]>;
 }
 
 /**
@@ -183,6 +190,17 @@ export function createJiraClient(config: JiraConfig): JiraClient {
     return data ?? [];
   }
 
+  async function searchAssignableUsers(projectKey: string, maxResults = 100): Promise<JiraAssignableUser[]> {
+    if (!projectKey) return [];
+
+    const data = await request<JiraAssignableUser[]>('/rest/api/2/user/assignable/search', {
+      project: projectKey,
+      maxResults,
+    });
+
+    return data ?? [];
+  }
+
   return {
     searchIssues,
     getIssue,
@@ -190,5 +208,6 @@ export function createJiraClient(config: JiraConfig): JiraClient {
     getBoards,
     getSprintIssues,
     getFields,
+    searchAssignableUsers,
   };
 }

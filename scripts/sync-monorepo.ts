@@ -1,19 +1,11 @@
 import dotenv from 'dotenv';
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
+import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import path from 'node:path';
+import { DEFAULT_WORKSPACE_ID } from '@/lib/app-info';
 
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
-
-function resolveSqlitePath(databaseUrl: string) {
-  if (!databaseUrl.startsWith('file:')) {
-    return databaseUrl;
-  }
-
-  const filePath = databaseUrl.slice('file:'.length);
-  return path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
-}
 
 function ensureEnv(name: string): string {
   const value = process.env[name]?.trim();
@@ -23,8 +15,8 @@ function ensureEnv(name: string): string {
   return value;
 }
 
-const databaseUrl = process.env.DATABASE_URL ?? 'file:./dev.db';
-const adapter = new PrismaBetterSqlite3({ url: resolveSqlitePath(databaseUrl) });
+const connectionString = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/team_scope?schema=public';
+const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
 
 const GITLAB_BASE = ensureEnv('GITLAB_BASE_URL').replace(/\/+$/, '');
@@ -32,7 +24,32 @@ const GITLAB_TOKEN = ensureEnv('GITLAB_PAT');
 const GITLAB_PROJECT_ID = ensureEnv('GITLAB_PROJECT_ID');
 const PROJECT_DB_ID = process.env.GITLAB_DB_PROJECT_ID?.trim() || `proj-gitlab-${GITLAB_PROJECT_ID}`;
 
-async function gitlabFetch(apiPath: string): Promise<any> {
+interface GitlabMergeRequestResponse {
+  iid: number;
+  title: string;
+  state: string;
+  author?: { username?: string | null } | null;
+  user_notes_count?: number | null;
+  changes_count?: number | string | null;
+  additions?: number | null;
+  deletions?: number | null;
+  source_branch?: string | null;
+  target_branch?: string | null;
+  created_at?: string | null;
+  merged_at?: string | null;
+}
+
+interface GitlabNoteResponse {
+  id: number;
+  body?: string | null;
+  system?: boolean | null;
+  author?: { username?: string | null } | null;
+  resolvable?: boolean | null;
+  resolved?: boolean | null;
+  created_at?: string | null;
+}
+
+async function gitlabFetch<T>(apiPath: string): Promise<T | null> {
   const res = await fetch(`${GITLAB_BASE}/api/v4${apiPath}`, {
     headers: { 'PRIVATE-TOKEN': GITLAB_TOKEN },
   });
@@ -40,7 +57,7 @@ async function gitlabFetch(apiPath: string): Promise<any> {
     console.warn(`  [GitLab] ${res.status} ${res.statusText} - ${apiPath.slice(0, 80)}`);
     return null;
   }
-  return res.json();
+  return (await res.json()) as T;
 }
 
 async function main() {
@@ -50,7 +67,7 @@ async function main() {
   console.log(`GitLab: ${GITLAB_BASE} (Project ${GITLAB_PROJECT_ID})`);
 
   const developers = await prisma.developer.findMany({
-    where: { isActive: true },
+    where: { workspaceId: DEFAULT_WORKSPACE_ID, isActive: true },
     select: { id: true, gitlabUsername: true },
   });
   const developerByGitlab = new Map(
@@ -69,7 +86,7 @@ async function main() {
   let hasMore = true;
 
   while (hasMore) {
-    const mrs = await gitlabFetch(
+    const mrs = await gitlabFetch<GitlabMergeRequestResponse[]>(
       `/projects/${GITLAB_PROJECT_ID}/merge_requests?state=all&per_page=100&page=${page}&created_after=${sinceStr}`,
     );
     if (!mrs || !Array.isArray(mrs) || mrs.length === 0) {
@@ -78,10 +95,19 @@ async function main() {
     }
 
     for (const mr of mrs) {
-      const authorId = developerByGitlab.get(mr.author?.username ?? '') ?? null;
+      if (!mr.created_at) continue;
+      const authorUsername = mr.author?.username ?? null;
+      const authorId = authorUsername ? (developerByGitlab.get(authorUsername) ?? null) : null;
 
       const mrRecord = await prisma.gitlabMR.upsert({
-        where: { mrIid_projectId: { mrIid: mr.iid, projectId: PROJECT_DB_ID } },
+        where: {
+          workspaceId_mrIid_projectId_sourceProjectKey: {
+            workspaceId: DEFAULT_WORKSPACE_ID,
+            mrIid: mr.iid,
+            projectId: PROJECT_DB_ID,
+            sourceProjectKey: String(GITLAB_PROJECT_ID),
+          },
+        },
         update: {
           title: mr.title,
           state: mr.state,
@@ -90,12 +116,16 @@ async function main() {
           changesCount: mr.changes_count != null ? parseInt(String(mr.changes_count), 10) : null,
           additions: mr.additions ?? null,
           deletions: mr.deletions ?? null,
-          sourceBranch: mr.source_branch,
-          targetBranch: mr.target_branch,
-          mrMergedAt: mr.merged_at,
+          sourceBranch: mr.source_branch ?? null,
+          targetBranch: mr.target_branch ?? null,
+          sourceProjectKey: String(GITLAB_PROJECT_ID),
+          sourceProjectName: null,
+          sourceProjectWebUrl: null,
+          mrMergedAt: mr.merged_at ?? null,
           syncedAt: new Date(),
         },
         create: {
+          workspaceId: DEFAULT_WORKSPACE_ID,
           mrIid: mr.iid,
           title: mr.title,
           state: mr.state,
@@ -105,30 +135,38 @@ async function main() {
           changesCount: mr.changes_count != null ? parseInt(String(mr.changes_count), 10) : null,
           additions: mr.additions ?? null,
           deletions: mr.deletions ?? null,
-          sourceBranch: mr.source_branch,
-          targetBranch: mr.target_branch,
+          sourceBranch: mr.source_branch ?? null,
+          targetBranch: mr.target_branch ?? null,
+          sourceProjectKey: String(GITLAB_PROJECT_ID),
+          sourceProjectName: null,
+          sourceProjectWebUrl: null,
           mrCreatedAt: mr.created_at,
-          mrMergedAt: mr.merged_at,
+          mrMergedAt: mr.merged_at ?? null,
         },
       });
       totalMRs++;
 
-      const notes = await gitlabFetch(`/projects/${GITLAB_PROJECT_ID}/merge_requests/${mr.iid}/notes?per_page=100`);
+      const notes = await gitlabFetch<GitlabNoteResponse[]>(
+        `/projects/${GITLAB_PROJECT_ID}/merge_requests/${mr.iid}/notes?per_page=100`,
+      );
       if (!notes || !Array.isArray(notes)) continue;
 
       for (const note of notes) {
         if (note.system) continue;
+        if (!note.created_at) continue;
 
-        const noteAuthorId = developerByGitlab.get(note.author?.username ?? '') ?? null;
+        const noteAuthorUsername = note.author?.username ?? null;
+        const noteAuthorId = noteAuthorUsername ? (developerByGitlab.get(noteAuthorUsername) ?? null) : null;
 
         await prisma.gitlabNote.upsert({
-          where: { noteId_mrId: { noteId: note.id, mrId: mrRecord.id } },
+          where: { workspaceId_noteId_mrId: { workspaceId: DEFAULT_WORKSPACE_ID, noteId: note.id, mrId: mrRecord.id } },
           update: {
             body: note.body?.slice(0, 2000) ?? '',
             isResolvable: note.resolvable ?? false,
             isResolved: note.resolved ?? false,
           },
           create: {
+            workspaceId: DEFAULT_WORKSPACE_ID,
             noteId: note.id,
             mrId: mrRecord.id,
             body: note.body?.slice(0, 2000) ?? '',
@@ -163,4 +201,6 @@ main()
     console.error('동기화 실패:', e);
     process.exit(1);
   })
-  .finally(() => prisma.$disconnect());
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

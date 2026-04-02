@@ -4,8 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQueryStates, parseAsString, parseAsArrayOf } from 'nuqs';
 import { cn } from '@/lib/utils';
 import { Check, RotateCcw } from 'lucide-react';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
-import { DateRangeFilter } from '@/components/filters/date-range-filter/DateRangeFilter';
+import { DateRangeFilter, getDefaultRecentRange } from '@/components/filters/date-range-filter/DateRangeFilter';
 import { DeveloperFilter } from '@/components/filters/developer-filter/DeveloperFilter';
 import { ProjectFilter } from '@/components/filters/project-filter/ProjectFilter';
 import { SearchFilter } from '@/components/filters/search-filter/SearchFilter';
@@ -16,39 +15,12 @@ interface FilterBarProps {
 }
 
 function getDefaultDateRange(): DateRange {
-  const now = new Date();
-  return {
-    from: format(startOfMonth(now), 'yyyy-MM-dd'),
-    to: format(endOfMonth(now), 'yyyy-MM-dd'),
-  };
+  return getDefaultRecentRange();
 }
 
 export function FilterBar({ className }: FilterBarProps) {
   const [developerOptions, setDeveloperOptions] = useState<{ id: string; name: string; groupId?: string }[]>([]);
   const [projectOptions, setProjectOptions] = useState<{ id: string; name: string; type: 'Jira' | 'GitLab' }[]>([]);
-
-  useEffect(() => {
-    fetch('/api/developers').then((r) => r.json()).then((json) => {
-      if (json.success && Array.isArray(json.data)) {
-        setDeveloperOptions(json.data.map((d: Record<string, unknown>) => ({
-          id: d.id as string,
-          name: d.name as string,
-          groupId: (d.groupId as string) ?? undefined,
-        })));
-      }
-    }).catch(() => {});
-
-    fetch('/api/projects').then((r) => r.json()).then((json) => {
-      if (json.success && Array.isArray(json.data)) {
-        setProjectOptions(json.data.map((p: Record<string, unknown>) => ({
-          id: p.id as string,
-          name: p.name as string,
-          type: (p.type === 'gitlab' ? 'GitLab' : 'Jira') as 'Jira' | 'GitLab',
-        })));
-      }
-    }).catch(() => {});
-  }, []);
-
   const [params, setParams] = useQueryStates({
     from: parseAsString.withDefault(getDefaultDateRange().from),
     to: parseAsString.withDefault(getDefaultDateRange().to),
@@ -63,6 +35,34 @@ export function FilterBar({ className }: FilterBarProps) {
   const [draftSearch, setDraftSearch] = useState<string>(params.search);
 
   useEffect(() => {
+    const projectQuery = draftProjects.length ? `?projectIds=${draftProjects.join(',')}` : '';
+
+    fetch(`/api/developers${projectQuery}`).then((r) => r.json()).then((json) => {
+      if (json.success && Array.isArray(json.data)) {
+        setDeveloperOptions(json.data.map((d: Record<string, unknown>) => ({
+          id: d.id as string,
+          name: d.name as string,
+          groupId: (d.groupId as string) ?? undefined,
+        })));
+      }
+    }).catch(() => {});
+  }, [draftProjects]);
+
+  useEffect(() => {
+    fetch('/api/projects').then((r) => r.json()).then((json) => {
+      if (json.success && Array.isArray(json.data)) {
+        setProjectOptions(json.data.map((p: Record<string, unknown>) => ({
+          id: p.id as string,
+          name: p.name as string,
+          type: (p.type === 'gitlab' ? 'GitLab' : 'Jira') as 'Jira' | 'GitLab',
+        })));
+      }
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    // nuqs 쿼리 파라미터를 draft UI 상태와 동기화한다.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraftDateRange({ from: params.from, to: params.to });
     setDraftDevelopers(params.developers);
     setDraftProjects(params.projects);
@@ -78,6 +78,7 @@ export function FilterBar({ className }: FilterBarProps) {
       setParams({ developers: normalizedAppliedDevelopers });
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDraftDevelopers((prev) => prev.filter((id) => validDeveloperIds.has(id)));
   }, [developerOptions, params.developers, setParams]);
 

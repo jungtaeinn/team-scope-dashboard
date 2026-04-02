@@ -1,1 +1,1 @@
-export { DEFAULT_SCORING_WEIGHTS } from './scoring-weights';
+export { DEFAULT_SCORING_METHOD, DEFAULT_SCORING_WEIGHTS, SCORE_STATUS_THRESHOLDS } from './scoring-weights';

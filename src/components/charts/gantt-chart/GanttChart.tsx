@@ -1,19 +1,57 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addDays, differenceInCalendarDays, format, isWeekend, parseISO, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns';
+import { addDays, differenceInCalendarDays, format, isWeekend, parseISO, startOfWeek, endOfWeek, eachDayOfInterval, startOfDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Calendar, AlertCircle, ArrowUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { GanttIssue, DeveloperGanttData } from '@/hooks/use-gantt-data';
 
-/** Gantt 바 상태별 색상 */
-const STATUS_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  done: { bg: 'bg-emerald-500/80', border: 'border-emerald-600', text: 'text-emerald-100' },
-  closed: { bg: 'bg-slate-600/70', border: 'border-slate-500', text: 'text-slate-100' },
-  progress: { bg: 'bg-blue-500/80', border: 'border-blue-600', text: 'text-blue-100' },
-  waiting: { bg: 'bg-amber-500/70', border: 'border-amber-600', text: 'text-amber-100' },
-  default: { bg: 'bg-slate-500/60', border: 'border-slate-600', text: 'text-slate-100' },
+type StatusToneKey = 'done' | 'closed' | 'progress' | 'waiting' | 'default';
+type IssueTone = { bg: string; border: string; text: string };
+
+/** Gantt 바 상태별 기본/프로젝트 변형 톤 */
+const STATUS_TONES: Record<StatusToneKey, IssueTone[]> = {
+  done: [
+    { bg: 'rgba(16, 185, 129, 0.92)', border: 'rgba(4, 120, 87, 0.98)', text: '#ecfdf5' },
+    { bg: 'rgba(14, 165, 233, 0.9)', border: 'rgba(3, 105, 161, 0.98)', text: '#f0f9ff' },
+    { bg: 'rgba(132, 204, 22, 0.9)', border: 'rgba(77, 124, 15, 0.98)', text: '#f7fee7' },
+    { bg: 'rgba(168, 85, 247, 0.9)', border: 'rgba(126, 34, 206, 0.98)', text: '#faf5ff' },
+    { bg: 'rgba(244, 114, 182, 0.88)', border: 'rgba(190, 24, 93, 0.98)', text: '#fdf2f8' },
+    { bg: 'rgba(249, 115, 22, 0.9)', border: 'rgba(194, 65, 12, 0.98)', text: '#fff7ed' },
+  ],
+  closed: [
+    { bg: 'rgba(71, 85, 105, 0.82)', border: 'rgba(100, 116, 139, 0.98)', text: '#e2e8f0' },
+    { bg: 'rgba(67, 56, 202, 0.5)', border: 'rgba(129, 140, 248, 0.98)', text: '#e0e7ff' },
+    { bg: 'rgba(82, 82, 91, 0.84)', border: 'rgba(161, 161, 170, 0.98)', text: '#fafafa' },
+    { bg: 'rgba(30, 41, 59, 0.86)', border: 'rgba(125, 211, 252, 0.82)', text: '#e0f2fe' },
+    { bg: 'rgba(69, 26, 3, 0.72)', border: 'rgba(251, 146, 60, 0.88)', text: '#ffedd5' },
+    { bg: 'rgba(63, 63, 70, 0.84)', border: 'rgba(212, 212, 216, 0.92)', text: '#fafafa' },
+  ],
+  progress: [
+    { bg: 'rgba(59, 130, 246, 0.92)', border: 'rgba(29, 78, 216, 0.98)', text: '#eff6ff' },
+    { bg: 'rgba(6, 182, 212, 0.92)', border: 'rgba(14, 116, 144, 0.98)', text: '#ecfeff' },
+    { bg: 'rgba(99, 102, 241, 0.92)', border: 'rgba(67, 56, 202, 0.98)', text: '#eef2ff' },
+    { bg: 'rgba(217, 70, 239, 0.88)', border: 'rgba(162, 28, 175, 0.98)', text: '#fdf4ff' },
+    { bg: 'rgba(244, 63, 94, 0.88)', border: 'rgba(190, 24, 93, 0.98)', text: '#fff1f2' },
+    { bg: 'rgba(34, 197, 94, 0.88)', border: 'rgba(21, 128, 61, 0.98)', text: '#f0fdf4' },
+  ],
+  waiting: [
+    { bg: 'rgba(245, 158, 11, 0.88)', border: 'rgba(180, 83, 9, 0.98)', text: '#fffbeb' },
+    { bg: 'rgba(249, 115, 22, 0.88)', border: 'rgba(194, 65, 12, 0.98)', text: '#fff7ed' },
+    { bg: 'rgba(234, 88, 12, 0.88)', border: 'rgba(154, 52, 18, 0.98)', text: '#fff7ed' },
+    { bg: 'rgba(234, 179, 8, 0.86)', border: 'rgba(161, 98, 7, 0.98)', text: '#fefce8' },
+    { bg: 'rgba(244, 63, 94, 0.84)', border: 'rgba(190, 24, 93, 0.98)', text: '#fff1f2' },
+    { bg: 'rgba(168, 85, 247, 0.84)', border: 'rgba(126, 34, 206, 0.98)', text: '#faf5ff' },
+  ],
+  default: [
+    { bg: 'rgba(100, 116, 139, 0.74)', border: 'rgba(71, 85, 105, 0.98)', text: '#f8fafc' },
+    { bg: 'rgba(148, 163, 184, 0.72)', border: 'rgba(100, 116, 139, 0.98)', text: '#f8fafc' },
+    { bg: 'rgba(113, 113, 122, 0.72)', border: 'rgba(82, 82, 91, 0.98)', text: '#fafafa' },
+    { bg: 'rgba(51, 65, 85, 0.76)', border: 'rgba(71, 85, 105, 0.98)', text: '#e2e8f0' },
+    { bg: 'rgba(83, 83, 153, 0.7)', border: 'rgba(99, 102, 241, 0.96)', text: '#eef2ff' },
+    { bg: 'rgba(87, 83, 78, 0.76)', border: 'rgba(161, 161, 170, 0.92)', text: '#fafaf9' },
+  ],
 };
 
 const CLOSED_STATUSES = ['closed', '닫힘', '종료', 'resolved', '해결됨'];
@@ -21,13 +59,19 @@ const DONE_STATUSES = ['done', '완료', 'complete', '해결'];
 const PROGRESS_STATUSES = ['in progress', '개발 진행중', '개발 분석중', '처리 중', 'in development', '개발 qa', '기능 qa'];
 const WAITING_STATUSES = ['open', 'to do', '개발 요청 전환', '개발 작업 대기', 'backlog'];
 
-function getStatusColor(status: string) {
+function getStatusToneKey(status: string): StatusToneKey {
   const lower = status.toLowerCase();
-  if (CLOSED_STATUSES.includes(lower)) return STATUS_COLORS.closed;
-  if (DONE_STATUSES.includes(lower)) return STATUS_COLORS.done;
-  if (PROGRESS_STATUSES.includes(lower)) return STATUS_COLORS.progress;
-  if (WAITING_STATUSES.includes(lower)) return STATUS_COLORS.waiting;
-  return STATUS_COLORS.default;
+  if (CLOSED_STATUSES.includes(lower)) return 'closed';
+  if (DONE_STATUSES.includes(lower)) return 'done';
+  if (PROGRESS_STATUSES.includes(lower)) return 'progress';
+  if (WAITING_STATUSES.includes(lower)) return 'waiting';
+  return 'default';
+}
+
+function getIssueTone(status: string, projectVariantIndex: number, projectAware: boolean): IssueTone {
+  const toneKey = getStatusToneKey(status);
+  const tones = STATUS_TONES[toneKey];
+  return projectAware ? tones[projectVariantIndex % tones.length] : tones[0];
 }
 
 /** 영업일 수 계산 */
@@ -66,13 +110,20 @@ interface GanttChartProps {
   className?: string;
   /** 단일 개발자 모드 (상세 페이지용) */
   singleDeveloper?: boolean;
+  /** Jira 전체 선택 시 프로젝트별로 색조를 살짝 분리 */
+  projectColorMode?: 'status' | 'project-aware';
 }
 
 /**
  * 반응형 Gantt 차트 컴포넌트
  * @description 개발자별 Jira 이슈 일정을 시간축 기반으로 시각화
  */
-export function GanttChart({ data, className, singleDeveloper = false }: GanttChartProps) {
+export function GanttChart({
+  data,
+  className,
+  singleDeveloper = false,
+  projectColorMode = 'status',
+}: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const didAutoFocusTodayRef = useRef(false);
   const workloadTouchStartXRef = useRef<number | null>(null);
@@ -154,8 +205,13 @@ export function GanttChart({ data, className, singleDeveloper = false }: GanttCh
     const today = new Date();
     const rawOffset = differenceInCalendarDays(today, rangeStart);
     const targetOffset = Math.max(0, Math.min(maxOffset, rawOffset - Math.floor(VISIBLE_DAYS / 2)));
-    setViewOffset(targetOffset);
-    didAutoFocusTodayRef.current = true;
+
+    const frame = window.requestAnimationFrame(() => {
+      setViewOffset(targetOffset);
+      didAutoFocusTodayRef.current = true;
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, [data, rangeStart, maxOffset, VISIBLE_DAYS]);
 
   const handlePrev = useCallback(() => {
@@ -179,7 +235,13 @@ export function GanttChart({ data, className, singleDeveloper = false }: GanttCh
 
   useEffect(() => {
     if (!visibleDays.length) return;
-    setWorkloadBaseDate(format(visibleDays[0], 'yyyy-MM-dd'));
+
+    const nextBaseDate = format(visibleDays[0], 'yyyy-MM-dd');
+    const frame = window.requestAnimationFrame(() => {
+      setWorkloadBaseDate(nextBaseDate);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, [visibleDays]);
 
   const workloadBase = useMemo(() => {
@@ -255,6 +317,23 @@ export function GanttChart({ data, className, singleDeveloper = false }: GanttCh
     });
   }, [data]);
 
+  const projectVariantMap = useMemo(() => {
+    const projectIds = Array.from(
+      new Set(
+        data.flatMap((developer) =>
+          developer.issues
+            .map((issue) => issue.projectId)
+            .filter((projectId): projectId is string => Boolean(projectId)),
+        ),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+
+    return new Map(projectIds.map((projectId, index) => [projectId, index]));
+  }, [data]);
+
+  const useProjectAwareColors = projectColorMode === 'project-aware' && projectVariantMap.size > 1;
+  const todayStart = useMemo(() => startOfDay(new Date()), []);
+
   const handleMouseEnter = useCallback((e: React.MouseEvent, issue: GanttIssue) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -283,15 +362,6 @@ export function GanttChart({ data, className, singleDeveloper = false }: GanttCh
     const issueUrl = issue.issueUrl ?? `https://your-jira-instance.com/browse/${issue.issueKey}`;
     window.open(issueUrl, '_blank', 'noopener,noreferrer');
   }, []);
-
-  if (!data.length) {
-    return (
-      <div className={cn('flex h-40 items-center justify-center rounded-xl border bg-[var(--card)] text-sm text-[var(--muted-foreground)]', className)}>
-        <AlertCircle className="mr-2 h-4 w-4" />
-        Gantt 데이터가 없습니다
-      </div>
-    );
-  }
 
   const chartWidth = VISIBLE_DAYS * DAY_WIDTH;
   const WORKLOAD_PAGE_SIZE = 6;
@@ -328,11 +398,20 @@ export function GanttChart({ data, className, singleDeveloper = false }: GanttCh
 
   useEffect(() => {
     if (workloadPages.length === 0) return;
-    setWorkloadPage((prev) => Math.min(prev, workloadPages.length - 1));
+
+    const frame = window.requestAnimationFrame(() => {
+      setWorkloadPage((prev) => Math.min(prev, workloadPages.length - 1));
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, [workloadPages.length]);
 
   useEffect(() => {
-    setWorkloadPage(0);
+    const frame = window.requestAnimationFrame(() => {
+      setWorkloadPage(0);
+    });
+
+    return () => window.cancelAnimationFrame(frame);
   }, [workloadSort]);
 
   const handleWorkloadTouchStart = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
@@ -359,6 +438,20 @@ export function GanttChart({ data, className, singleDeveloper = false }: GanttCh
       setWorkloadPage((prev) => Math.max(0, prev - 1));
     }
   }, [workloadPages.length]);
+
+  if (!data.length) {
+    return (
+      <div
+        className={cn(
+          'flex h-40 items-center justify-center rounded-xl border bg-[var(--card)] text-sm text-[var(--muted-foreground)]',
+          className,
+        )}
+      >
+        <AlertCircle className="mr-2 h-4 w-4" />
+        Gantt 데이터가 없습니다
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className={cn('relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-[var(--card)]', className)}>
@@ -478,22 +571,34 @@ export function GanttChart({ data, className, singleDeveloper = false }: GanttCh
                       const clampedWidth = Math.min(width - (clampedLeft - left), chartWidth - clampedLeft);
                       if (clampedWidth <= 0) return null;
 
-                      const colors = getStatusColor(issue.status);
+                      const tone = getIssueTone(
+                        issue.status,
+                        issue.projectId ? (projectVariantMap.get(issue.projectId) ?? 0) : 0,
+                        useProjectAwareColors,
+                      );
+                      const isPastIssue = issueEnd < todayStart;
 
                       return (
                         <button
                           type="button"
                           key={issue.issueKey}
                           className={cn(
-                            'absolute rounded-sm border cursor-pointer transition-all hover:brightness-110 hover:shadow-md z-20',
+                            'absolute z-20 cursor-pointer rounded-sm border transition-all hover:brightness-110 hover:shadow-md',
                             'focus:outline-none focus:ring-2 focus:ring-blue-400/70',
-                            colors.bg, colors.border,
+                            isPastIssue && 'hover:brightness-100',
                           )}
                           style={{
                             left: clampedLeft,
                             top: laneIdx * ROW_HEIGHT + 3,
                             width: clampedWidth,
                             height: ROW_HEIGHT - 6,
+                            backgroundColor: tone.bg,
+                            borderColor: isPastIssue ? `${tone.border}aa` : tone.border,
+                            boxShadow: useProjectAwareColors
+                              ? `0 0 0 1px ${tone.border}${isPastIssue ? '08' : '18'} inset`
+                              : undefined,
+                            opacity: isPastIssue ? 0.45 : 1,
+                            filter: isPastIssue ? 'saturate(0.42) brightness(0.72)' : undefined,
                           }}
                           onClick={() => handleIssueClick(issue)}
                           onMouseEnter={(e) => handleMouseEnter(e, issue)}
@@ -501,7 +606,10 @@ export function GanttChart({ data, className, singleDeveloper = false }: GanttCh
                           onMouseLeave={handleMouseLeave}
                           title={`${issue.issueKey} 열기`}
                         >
-                          <div className={cn('truncate px-1 text-[10px] font-medium leading-snug', colors.text, isMobile ? 'hidden' : '')}>
+                          <div
+                            className={cn('truncate px-1 text-[10px] font-medium leading-snug', isMobile ? 'hidden' : '')}
+                            style={{ color: tone.text, opacity: isPastIssue ? 0.78 : 1 }}
+                          >
                             {clampedWidth > 60 ? issue.issueKey : ''}
                             {clampedWidth > 120 && ` ${issue.summary.slice(0, 20)}`}
                           </div>
@@ -524,7 +632,7 @@ export function GanttChart({ data, className, singleDeveloper = false }: GanttCh
         )}>
           <div className="flex h-full min-h-0 flex-col">
             <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2">
-            <p className="text-xs font-semibold text-[var(--card-foreground)]">공수 현황</p>
+            <p className="text-xs font-semibold text-[var(--card-foreground)]">현재 보이는 기간 공수 현황</p>
             <span className="rounded-full border border-[var(--border)]/80 bg-[var(--card)] px-2 py-0.5 text-[10px] text-[var(--muted-foreground)]">
               기준 {format(workloadSummary.baseDate, 'yyyy.MM.dd')} ~ {format(workloadSummary.endDate, 'MM.dd')} · 영업일 {workloadSummary.businessDaysTotal}일
             </span>
@@ -670,6 +778,12 @@ export function GanttChart({ data, className, singleDeveloper = false }: GanttCh
           <div className="mb-2 text-[var(--muted-foreground)] line-clamp-2">{hoveredIssue.issue.summary}</div>
           <div className="space-y-0.5 text-[var(--muted-foreground)]">
             <div className="flex justify-between">
+              <span>프로젝트</span>
+              <span className="truncate pl-3 font-medium text-[var(--popover-foreground)]">
+                {hoveredIssue.issue.projectName ?? '-'}
+              </span>
+            </div>
+            <div className="flex justify-between">
               <span>상태</span>
               <span className="font-medium text-[var(--popover-foreground)]">{hoveredIssue.issue.status}</span>
             </div>
@@ -680,6 +794,12 @@ export function GanttChart({ data, className, singleDeveloper = false }: GanttCh
             <div className="flex justify-between">
               <span>기간</span>
               <span className="font-medium text-[var(--popover-foreground)]">{hoveredIssue.issue.startDate} → {hoveredIssue.issue.endDate}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>구분</span>
+              <span className="font-medium text-[var(--popover-foreground)]">
+                {parseISO(hoveredIssue.issue.endDate) < todayStart ? '종료된 일정' : '진행/예정 일정'}
+              </span>
             </div>
             <div className="flex justify-between">
               <span>소요일</span>

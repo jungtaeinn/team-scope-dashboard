@@ -2,8 +2,8 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
-import { Save, RotateCcw, Loader2 } from 'lucide-react';
-import { DEFAULT_SCORING_WEIGHTS } from '@/common/constants';
+import { Save, RotateCcw, Loader2, ExternalLink, Info, X } from 'lucide-react';
+import { DEFAULT_SCORING_METHOD, DEFAULT_SCORING_WEIGHTS, SCORE_STATUS_THRESHOLDS } from '@/common/constants';
 import type { ScoringWeights } from '@/lib/scoring';
 
 /** 슬라이더 항목 정의 */
@@ -40,6 +40,7 @@ const GITLAB_ITEMS: SliderItem[] = [
 export function ScoringWeightSlider() {
   const [weights, setWeights] = useState<ScoringWeights>(DEFAULT_SCORING_WEIGHTS);
   const [isSaving, setIsSaving] = useState(false);
+  const [isMethodologyOpen, setIsMethodologyOpen] = useState(false);
 
   /** Jira 가중치 합계 */
   const jiraSum = useMemo(
@@ -110,16 +111,120 @@ export function ScoringWeightSlider() {
         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">스코어링 가중치</h3>
         <button
           type="button"
-          onClick={handleReset}
+          onClick={() => setIsMethodologyOpen(true)}
           className={cn(
-            'inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium',
-            'text-gray-600 hover:bg-gray-100 transition-colors dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700',
+            'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] leading-none transition-colors',
+            'border-[var(--border)] text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]',
           )}
+          aria-label="추천 기본값 기준 보기"
+          title="추천 기본값 기준 보기"
         >
-          <RotateCcw className="h-4 w-4" />
-          기본값으로 초기화
+          <Info className="h-3.5 w-3.5" />
+          기준
         </button>
       </div>
+
+      {isMethodologyOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 px-4 py-6" onClick={() => setIsMethodologyOpen(false)}>
+          <div
+            className="max-h-[85vh] w-full max-w-5xl overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="추천 기본값 기준"
+          >
+            <div className="flex items-start justify-between border-b border-[var(--border)] px-5 py-4">
+              <div className="min-w-0">
+                <div className="mb-2 inline-flex items-center gap-1 rounded-md border border-[var(--border)] px-2 py-1 text-[11px] text-[var(--muted-foreground)]">
+                  <Info className="h-3.5 w-3.5" />
+                  기준
+                </div>
+                <p className="text-base font-semibold text-[var(--foreground)]">{DEFAULT_SCORING_METHOD.name}</p>
+                <p className="mt-1 text-sm text-[var(--muted-foreground)]">{DEFAULT_SCORING_METHOD.summary}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMethodologyOpen(false)}
+                className="rounded-lg border border-[var(--border)] p-2 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+                aria-label="닫기"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 p-5">
+              <div className="grid gap-3 lg:grid-cols-3">
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
+                  <p className="text-xs font-semibold text-[var(--primary)]">종합 비중</p>
+                  <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">{DEFAULT_SCORING_METHOD.rationale.composite}</p>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
+                  <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">Jira 세부 가중치</p>
+                  <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">{DEFAULT_SCORING_METHOD.rationale.jira}</p>
+                </div>
+                <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4">
+                  <p className="text-xs font-semibold text-orange-600 dark:text-orange-400">GitLab 세부 가중치</p>
+                  <p className="mt-2 text-sm leading-6 text-[var(--muted-foreground)]">{DEFAULT_SCORING_METHOD.rationale.gitlab}</p>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--card)]/60 p-4">
+                <div className="grid gap-3 md:grid-cols-3">
+                  <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+                    <p className="text-[11px] font-semibold text-emerald-300">좋음 기준</p>
+                    <p className="mt-2 text-xs leading-6 text-[var(--muted-foreground)]">
+                      종합 점수 {SCORE_STATUS_THRESHOLDS.composite.goodMin}% 이상
+                      <br />
+                      Jira 점수 {SCORE_STATUS_THRESHOLDS.jira.goodMin}% 이상
+                      <br />
+                      GitLab 점수 {SCORE_STATUS_THRESHOLDS.gitlab.goodMin}% 이상
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                    <p className="text-[11px] font-semibold text-amber-300">주의 기준</p>
+                    <p className="mt-2 text-xs leading-6 text-[var(--muted-foreground)]">
+                      종합 점수 {SCORE_STATUS_THRESHOLDS.composite.warnMin}~{SCORE_STATUS_THRESHOLDS.composite.goodMin - 1}%
+                      <br />
+                      Jira 점수 {SCORE_STATUS_THRESHOLDS.jira.warnMin}~{SCORE_STATUS_THRESHOLDS.jira.goodMin - 1}%
+                      <br />
+                      GitLab 점수 {SCORE_STATUS_THRESHOLDS.gitlab.warnMin}~{SCORE_STATUS_THRESHOLDS.gitlab.goodMin - 1}%
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-3">
+                    <p className="text-[11px] font-semibold text-rose-300">위험 기준</p>
+                    <p className="mt-2 text-xs leading-6 text-[var(--muted-foreground)]">
+                      종합 점수 {SCORE_STATUS_THRESHOLDS.composite.warnMin}% 미만
+                      <br />
+                      Jira 점수 {SCORE_STATUS_THRESHOLDS.jira.warnMin}% 미만
+                      <br />
+                      GitLab 점수 {SCORE_STATUS_THRESHOLDS.gitlab.warnMin}% 미만
+                    </p>
+                  </div>
+                </div>
+                <p className="mt-3 text-[11px] leading-6 text-[var(--muted-foreground)]">
+                  PMI EVM은 일정·공수 지표에서 1.0 이상을 건강한 기준으로 보고, DORA는 리드타임·안정성, SPACE는 협업과 실행 품질을 함께 봅니다.
+                  TeamScope는 이 기준을 점수화해서 Jira는 {SCORE_STATUS_THRESHOLDS.jira.goodMin}% 이상, GitLab은 {SCORE_STATUS_THRESHOLDS.gitlab.goodMin}% 이상이면 안정권으로 해석하도록 기본 임계값을 두었습니다.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {DEFAULT_SCORING_METHOD.sources.map((source) => (
+                    <a
+                      key={source.url}
+                      href={source.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--card)] px-3 py-1.5 text-[11px] font-medium text-[var(--muted-foreground)] transition-colors hover:border-[var(--primary)] hover:text-[var(--foreground)]"
+                      title={source.note}
+                    >
+                      {source.label}
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 종합 비중 */}
       <div className="rounded-lg border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-900">
@@ -280,7 +385,18 @@ export function ScoringWeightSlider() {
         </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={handleReset}
+          className={cn(
+            'inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium',
+            'text-gray-600 hover:bg-gray-100 transition-colors dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700',
+          )}
+        >
+          <RotateCcw className="h-4 w-4" />
+          추천 기본값으로 초기화
+        </button>
         <button
           type="button"
           onClick={handleSave}

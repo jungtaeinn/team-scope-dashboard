@@ -9,6 +9,7 @@ interface JiraTicket {
   id: string;
   issueKey: string;
   summary: string;
+  issueUrl?: string;
   status: string;
   ganttStartDate: string | null;
   ganttEndDate: string | null;
@@ -49,6 +50,11 @@ function formatEffort(value: number | null): string {
 type SortKey = 'issueKey' | 'summary' | 'status' | 'ganttStartDate' | 'ganttEndDate' | 'plannedEffort';
 type SortDir = 'asc' | 'desc';
 
+function renderSortIcon(column: SortKey, sortKey: SortKey, sortDir: SortDir) {
+  if (sortKey !== column) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
+  return sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />;
+}
+
 /**
  * Jira 티켓 목록 테이블 컴포넌트
  * @description 개발자별 실데이터 티켓을 표 형태로 표시
@@ -77,11 +83,6 @@ export function JiraTicketList({ developerId, className }: { developerId: string
     setSortKey(key);
     setSortDir('desc');
   }, [sortKey]);
-
-  const SortIcon = useCallback(({ column }: { column: SortKey }) => {
-    if (sortKey !== column) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
-    return sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />;
-  }, [sortDir, sortKey]);
 
   const sortedData = useMemo(() => {
     const rows = [...(data ?? [])];
@@ -136,37 +137,37 @@ export function JiraTicketList({ developerId, className }: { developerId: string
               <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted-foreground)]">
                 <button type="button" onClick={() => handleSort('issueKey')} className="inline-flex items-center gap-1 hover:text-[var(--foreground)]">
                   이슈키
-                  <SortIcon column="issueKey" />
+                  {renderSortIcon('issueKey', sortKey, sortDir)}
                 </button>
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted-foreground)]">
                 <button type="button" onClick={() => handleSort('summary')} className="inline-flex items-center gap-1 hover:text-[var(--foreground)]">
                   제목
-                  <SortIcon column="summary" />
+                  {renderSortIcon('summary', sortKey, sortDir)}
                 </button>
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted-foreground)]">
                 <button type="button" onClick={() => handleSort('status')} className="inline-flex items-center gap-1 hover:text-[var(--foreground)]">
                   상태
-                  <SortIcon column="status" />
+                  {renderSortIcon('status', sortKey, sortDir)}
                 </button>
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted-foreground)]">
                 <button type="button" onClick={() => handleSort('ganttStartDate')} className="inline-flex items-center gap-1 hover:text-[var(--foreground)]">
                   시작일
-                  <SortIcon column="ganttStartDate" />
+                  {renderSortIcon('ganttStartDate', sortKey, sortDir)}
                 </button>
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted-foreground)]">
                 <button type="button" onClick={() => handleSort('ganttEndDate')} className="inline-flex items-center gap-1 hover:text-[var(--foreground)]">
                   완료일
-                  <SortIcon column="ganttEndDate" />
+                  {renderSortIcon('ganttEndDate', sortKey, sortDir)}
                 </button>
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted-foreground)]">
                 <button type="button" onClick={() => handleSort('plannedEffort')} className="inline-flex items-center gap-1 hover:text-[var(--foreground)]">
                   계획공수
-                  <SortIcon column="plannedEffort" />
+                  {renderSortIcon('plannedEffort', sortKey, sortDir)}
                 </button>
               </th>
             </tr>
@@ -176,8 +177,36 @@ export function JiraTicketList({ developerId, className }: { developerId: string
               const status = toKoreanStatus(ticket.status);
               return (
                 <tr key={ticket.id} className="border-b transition-colors last:border-b-0 hover:bg-[var(--accent)]">
-                  <td className="px-4 py-3 font-mono text-xs font-semibold text-[var(--primary)]">{ticket.issueKey}</td>
-                  <td className="max-w-xs truncate px-4 py-3 text-[var(--card-foreground)]">{ticket.summary}</td>
+                  <td className="px-4 py-3 font-mono text-xs font-semibold text-[var(--primary)]">
+                    {ticket.issueUrl ? (
+                      <a
+                        href={ticket.issueUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="transition-colors hover:text-[var(--foreground)] hover:underline"
+                        title={`${ticket.issueKey} 새 창으로 열기`}
+                      >
+                        {ticket.issueKey}
+                      </a>
+                    ) : (
+                      ticket.issueKey
+                    )}
+                  </td>
+                  <td className="max-w-xs truncate px-4 py-3 text-[var(--card-foreground)]">
+                    {ticket.issueUrl ? (
+                      <a
+                        href={ticket.issueUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="transition-colors hover:text-[var(--primary)] hover:underline"
+                        title={`${ticket.summary} 새 창으로 열기`}
+                      >
+                        {ticket.summary}
+                      </a>
+                    ) : (
+                      ticket.summary
+                    )}
+                  </td>
                   <td className="px-4 py-3">
                     <span className={cn('inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium', STATUS_COLORS[status])}>
                       {status}

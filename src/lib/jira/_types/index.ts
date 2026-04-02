@@ -22,6 +22,16 @@ export interface JiraUser {
   emailAddress?: string;
 }
 
+/** Jira 할당 가능 사용자 응답 */
+export interface JiraAssignableUser {
+  accountId?: string;
+  key?: string;
+  name?: string;
+  displayName?: string;
+  emailAddress?: string;
+  active?: boolean;
+}
+
 /** Jira 이슈 상태 */
 export interface JiraStatus {
   /** 상태 이름 */
@@ -64,6 +74,8 @@ export interface JiraIssueResponse {
     created: string;
     updated: string;
     resolutiondate?: string | null;
+    duedate?: string | null;
+    timespent?: number | null;
     [key: string]: unknown;
   };
 }
@@ -162,6 +174,10 @@ export interface ParsedJiraIssue {
   updated: string;
   /** 해결일 */
   resolutionDate: string | null;
+  /** 기한일 */
+  dueDate: string | null;
+  /** 기록 시간 (초) */
+  timeSpent: number | null;
 }
 
 /** Jira 검색 API 응답 */

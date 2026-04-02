@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { requireApiContext } from '@/lib/auth/api';
 import { prisma } from '@/lib/db';
 import {
   buildTeamSummarySheet,
@@ -61,11 +62,15 @@ const XLSX_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreads
  */
 export async function POST(request: Request) {
   try {
+    const authResult = await requireApiContext(request, ['owner', 'maintainer', 'reporter']);
+    if (!authResult.ok) return authResult.response;
+
     const body = (await request.json()) as ExportRequestBody;
+    const workspaceId = authResult.context.workspace.id;
     const period = body.period ?? new Date().toISOString().slice(0, 7);
     const sheetKeys = body.sheets ?? ['teamSummary', 'developerDetail', 'jiraIssues', 'gitlabMrs'];
 
-    const developerWhere: Record<string, unknown> = { isActive: true };
+    const developerWhere: Record<string, unknown> = { workspaceId, isActive: true };
     if (body.scope === 'developers' && body.developerIds?.length) {
       developerWhere.id = { in: body.developerIds };
     }
@@ -78,6 +83,7 @@ export async function POST(request: Request) {
     const devIds = developers.map((d: { id: string }) => d.id);
     const scores = await prisma.score.findMany({
       where: {
+        workspaceId,
         period,
         developerId: { in: devIds },
       },
@@ -105,8 +111,8 @@ export async function POST(request: Request) {
       for (const dev of developers as any[]) {
         const score = scoreByDeveloper.get(dev.id);
         const breakdown = score ? safeParseBreakdown(score.breakdown) : null;
-        const jiraIssues: any[] = await prisma.jiraIssue.findMany({ where: { assigneeId: dev.id } });
-        const gitlabMRs: any[] = await prisma.gitlabMR.findMany({ where: { authorId: dev.id } });
+        const jiraIssues: any[] = await prisma.jiraIssue.findMany({ where: { workspaceId, assigneeId: dev.id } });
+        const gitlabMRs: any[] = await prisma.gitlabMR.findMany({ where: { workspaceId, authorId: dev.id } });
 
         sheets.push({
           name: `${dev.name} 상세`,
@@ -122,14 +128,14 @@ export async function POST(request: Request) {
 
     if (sheetKeys.includes('jiraIssues')) {
       const allIssues: any[] = await prisma.jiraIssue.findMany({
-        where: { assigneeId: { in: devIds } },
+        where: { workspaceId, assigneeId: { in: devIds } },
       });
       sheets.push({ name: 'Jira 이슈', worksheet: buildJiraSheet(allIssues.map(toJiraParsed) as unknown as Record<string, unknown>[]) });
     }
 
     if (sheetKeys.includes('gitlabMrs')) {
       const allMRs: any[] = await prisma.gitlabMR.findMany({
-        where: { authorId: { in: devIds } },
+        where: { workspaceId, authorId: { in: devIds } },
       });
       sheets.push({ name: 'GitLab MR', worksheet: buildGitlabSheet(allMRs.map(toGitlabParsed) as unknown as Record<string, unknown>[]) });
     }
@@ -170,7 +176,7 @@ function buildCompositeScore(
   breakdown: { jira: JiraScoreBreakdown; gitlab: GitlabScoreBreakdown } | null,
   period: string,
 ): CompositeScore {
-  const emptyJira: JiraScoreBreakdown = { ticketCompletionRate: 0, scheduleAdherence: 0, effortAccuracy: 0, worklogDiligence: 0, total: 0 };
+  const emptyJira: JiraScoreBreakdown = { ticketCompletionRate: 0, scheduleAdherence: 0, effortAccuracy: null, worklogDiligence: null, total: 0 };
   const emptyGitlab: GitlabScoreBreakdown = { mrProductivity: 0, reviewParticipation: 0, feedbackResolution: 0, mrLeadTime: 0, ciPassRate: 0, total: 0 };
 
   const composite = score?.compositeScore ?? 0;

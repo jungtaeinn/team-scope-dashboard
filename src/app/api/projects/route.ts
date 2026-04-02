@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireApiContext } from '@/lib/auth/api';
 import { prisma } from '@/lib/db';
 import { ensureEnvProjects } from '@/lib/projects/ensure-env-projects';
+import { normalizeGitlabProjectBaseUrl } from '@/lib/gitlab/url';
 
 /** 프로젝트 생성/수정 요청 바디 */
 interface ProjectBody {
@@ -22,12 +24,17 @@ interface ProjectBody {
  * GET /api/projects
  * 전체 프로젝트 목록을 반환합니다.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    await ensureEnvProjects();
+    const authResult = await requireApiContext(request);
+    if (!authResult.ok) return authResult.response;
+
+    const workspaceId = authResult.context.workspace.id;
+
+    await ensureEnvProjects(workspaceId);
 
     const projects = await prisma.project.findMany({
-      where: { isActive: true },
+      where: { workspaceId, isActive: true },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true,
@@ -58,7 +65,11 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await requireApiContext(request, ['owner', 'maintainer']);
+    if (!authResult.ok) return authResult.response;
+
     const body = (await request.json()) as ProjectBody;
+    const workspaceId = authResult.context.workspace.id;
 
     if (!body.name?.trim()) {
       return NextResponse.json(
@@ -81,13 +92,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const normalizedBaseUrl =
+      body.type === 'gitlab'
+        ? normalizeGitlabProjectBaseUrl(body.baseUrl, body.projectKey)
+        : body.baseUrl.trim();
+
     let project;
 
     if (body.id) {
+      const existing = await prisma.project.findFirst({
+        where: { id: body.id, workspaceId },
+        select: { id: true },
+      });
+
+      if (!existing) {
+        return NextResponse.json(
+          { success: false, data: null, error: '수정할 프로젝트를 찾을 수 없습니다.' },
+          { status: 404 },
+        );
+      }
+
       const updateData: Record<string, unknown> = {
         name: body.name.trim(),
         type: body.type,
-        baseUrl: body.baseUrl.trim(),
+        baseUrl: normalizedBaseUrl,
         projectKey: body.projectKey?.trim() || null,
       };
 
@@ -119,9 +147,10 @@ export async function POST(request: NextRequest) {
 
       project = await prisma.project.create({
         data: {
+          workspaceId,
           name: body.name.trim(),
           type: body.type,
-          baseUrl: body.baseUrl.trim(),
+          baseUrl: normalizedBaseUrl,
           token: body.token,
           projectKey: body.projectKey?.trim() || null,
         },
@@ -156,6 +185,9 @@ export async function POST(request: NextRequest) {
  */
 export async function DELETE(request: NextRequest) {
   try {
+    const authResult = await requireApiContext(request, ['owner', 'maintainer']);
+    if (!authResult.ok) return authResult.response;
+
     const { searchParams } = request.nextUrl;
     const id = searchParams.get('id');
 
@@ -163,6 +195,18 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json(
         { success: false, data: null, error: '프로젝트 ID가 필요합니다.' },
         { status: 400 },
+      );
+    }
+
+    const existing = await prisma.project.findFirst({
+      where: { id, workspaceId: authResult.context.workspace.id },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, data: null, error: '프로젝트를 찾을 수 없습니다.' },
+        { status: 404 },
       );
     }
 

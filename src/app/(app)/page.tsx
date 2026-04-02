@@ -1,8 +1,10 @@
 import { Suspense } from 'react';
 import { FilterBar } from '@/components/filters';
-import { ExportDialog, SyncButton } from '@/components/export';
+import { ExportDialog } from '@/components/export';
 import { TeamSummaryCards } from '@/components/dashboard';
-import { DashboardClient } from '@/components/dashboard/_components/DashboardClient';
+import { DashboardClientShell } from '@/components/dashboard/_components/DashboardClientShell';
+import { canExport } from '@/lib/auth/roles';
+import { requireServerWorkspaceContext } from '@/lib/auth/session';
 
 /** 로딩 폴백 컴포넌트 */
 function CardSkeleton() {
@@ -13,17 +15,18 @@ function CardSkeleton() {
  * 메인 대시보드 페이지 (서버 컴포넌트)
  * @description FilterBar, TeamSummaryCards, WidgetGrid를 조합한 팀 성과 대시보드
  */
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const context = await requireServerWorkspaceContext();
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">팀 성과 대시보드</h1>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">프론트엔드 개발팀의 종합 성과 지표를 확인하세요</p>
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">프로젝트와 담당자 기준으로 팀 성과 지표를 확인하세요</p>
         </div>
         <div className="flex items-center gap-2">
-          <SyncButton />
-          <ExportDialog />
+          {canExport(context.membership.role) ? <ExportDialog /> : null}
         </div>
       </div>
 
@@ -31,8 +34,14 @@ export default function DashboardPage() {
         <FilterBar />
       </Suspense>
 
-      <TeamSummaryCards />
-      <DashboardClient />
+      <Suspense fallback={<CardSkeleton />}>
+        <TeamSummaryCards />
+      </Suspense>
+      {context.membership.role !== 'guest' ? (
+        <Suspense fallback={<CardSkeleton />}>
+          <DashboardClientShell />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

@@ -7,6 +7,8 @@ import type { ApiResponse } from '@/common/types';
 export interface GanttIssue {
   issueKey: string;
   issueUrl?: string;
+  projectId: string | null;
+  projectName: string | null;
   summary: string;
   status: string;
   sprint: string | null;
@@ -31,6 +33,7 @@ export interface DeveloperGanttData {
 /** useGanttData 옵션 */
 interface UseGanttDataOptions {
   developerIds?: string[];
+  projectIds?: string[];
   from?: string;
   to?: string;
 }
@@ -40,13 +43,14 @@ interface UseGanttDataOptions {
  * @param options - 개발자 ID, 기간 필터
  */
 export function useGanttData(options?: UseGanttDataOptions) {
-  const { developerIds, from, to } = options ?? {};
+  const { developerIds, projectIds, from, to } = options ?? {};
 
   return useQuery<DeveloperGanttData[]>({
-    queryKey: ['gantt-data', developerIds, from, to],
+    queryKey: ['gantt-data', developerIds, projectIds, from, to],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (developerIds?.length) params.set('developerIds', developerIds.join(','));
+      if (projectIds?.length) params.set('projectIds', projectIds.join(','));
       if (from) params.set('from', from);
       if (to) params.set('to', to);
 

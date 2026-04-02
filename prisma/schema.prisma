@@ -3,31 +3,170 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
+}
+
+model User {
+  id            String       @id @default(uuid())
+  name          String
+  email         String
+  emailVerified Boolean      @default(false)
+  image         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  members       Member[]
+  invitations   Invitation[]
+  passkeys      Passkey[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id                   String   @id @default(uuid())
+  expiresAt            DateTime
+  token                String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  ipAddress            String?
+  userAgent            String?
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeOrganizationId String?
+
+  @@unique([token])
+  @@index([userId])
+  @@index([activeOrganizationId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(uuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model Organization {
+  id          String       @id @default(uuid())
+  name        String
+  slug        String
+  logo        String?
+  createdAt   DateTime
+  metadata    String?
+  members     Member[]
+  invitations Invitation[]
+
+  @@unique([slug])
+  @@map("organization")
+}
+
+model Member {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String       @default("developer")
+  createdAt      DateTime
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([organizationId, role])
+  @@map("member")
+}
+
+model Invitation {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  role           String?
+  status         String       @default("pending")
+  expiresAt      DateTime
+  createdAt      DateTime     @default(now())
+  inviterId      String
+  user           User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([email])
+  @@map("invitation")
+}
+
+model Passkey {
+  id           String    @id @default(uuid())
+  name         String?
+  publicKey    String
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialID String
+  counter      Int
+  deviceType   String
+  backedUp     Boolean
+  transports   String?
+  createdAt    DateTime?
+  aaguid       String?
+
+  @@index([userId])
+  @@index([credentialID])
+  @@map("passkey")
 }
 
 /// 연동 프로젝트 (Jira, GitLab 등)
 model Project {
-  id         String   @id @default(cuid())
-  name       String
-  type       String // "jira" | "gitlab"
-  baseUrl    String
-  token      String
-  projectKey String? // Jira: "APM", GitLab: "907"
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String    @id @default(cuid())
+  workspaceId String    @default("default-workspace")
+  name        String
+  type        String
+  baseUrl     String
+  token       String
+  projectKey  String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   jiraIssues JiraIssue[]
   gitlabMRs  GitlabMR[]
   syncLogs   SyncLog[]
+  members    ProjectDeveloper[]
+
+  @@index([workspaceId, isActive])
+  @@index([workspaceId, type])
 }
 
 /// 개발자 정보
 model Developer {
   id             String          @id @default(cuid())
+  workspaceId    String          @default("default-workspace")
   name           String
-  jiraUsername    String?
+  jiraUsername   String?
   gitlabUsername String?
   groupId        String?
   group          DeveloperGroup? @relation(fields: [groupId], references: [id])
@@ -39,20 +178,41 @@ model Developer {
   jiraIssues  JiraIssue[]
   gitlabMRs   GitlabMR[]
   gitlabNotes GitlabNote[]
+  projects    ProjectDeveloper[]
+
+  @@index([workspaceId, isActive])
+  @@index([workspaceId, name])
+}
+
+/// 프로젝트별 개발자 매핑
+model ProjectDeveloper {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  developerId String
+  developer   Developer @relation(fields: [developerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([projectId, developerId])
+  @@index([developerId])
 }
 
 /// 개발자 그룹
 model DeveloperGroup {
-  id         String      @id @default(cuid())
-  name       String
-  developers Developer[]
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  id          String      @id @default(cuid())
+  workspaceId String      @default("default-workspace")
+  name        String
+  developers  Developer[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([workspaceId, name])
 }
 
 /// Jira 이슈 스냅샷
 model JiraIssue {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
+  workspaceId     String    @default("default-workspace")
   issueKey        String
   summary         String
   status          String
@@ -60,39 +220,45 @@ model JiraIssue {
   assigneeId      String?
   assignee        Developer? @relation(fields: [assigneeId], references: [id])
   projectId       String
-  project         Project  @relation(fields: [projectId], references: [id])
+  project         Project   @relation(fields: [projectId], references: [id])
   priority        String?
   sprintName      String?
   sprintState     String?
   storyPoints     Float?
-  ganttStartDate  String? // WBSGantt 시작일
-  ganttEndDate    String? // WBSGantt 완료일
-  baselineStart   String? // 기준선 시작일
-  baselineEnd     String? // 기준선 완료일
-  ganttProgress   Float? // 진행 상황 (%)
-  plannedEffort   Float? // 계획 공수 (MH)
-  actualEffort    Float? // 투입 공수 (MH)
-  remainingEffort Float? // 남은 공수
-  timeSpent       Int? // 작업 시간 (초)
+  ganttStartDate  String?
+  ganttEndDate    String?
+  baselineStart   String?
+  baselineEnd     String?
+  ganttProgress   Float?
+  plannedEffort   Float?
+  actualEffort    Float?
+  remainingEffort Float?
+  timeSpent       Int?
   dueDate         String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  syncedAt        DateTime @default(now())
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  syncedAt        DateTime  @default(now())
 
-  @@unique([issueKey, projectId])
+  @@unique([workspaceId, issueKey, projectId])
+  @@index([workspaceId, assigneeId])
+  @@index([workspaceId, projectId])
 }
 
 /// GitLab Merge Request 스냅샷
 model GitlabMR {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
+  workspaceId    String    @default("default-workspace")
   mrIid          Int
   title          String
-  state          String // "merged" | "opened" | "closed"
+  state          String
   authorId       String?
   author         Developer? @relation(fields: [authorId], references: [id])
   projectId      String
-  project        Project  @relation(fields: [projectId], references: [id])
-  notesCount     Int      @default(0)
+  project        Project   @relation(fields: [projectId], references: [id])
+  sourceProjectKey String  @default("")
+  sourceProjectName String?
+  sourceProjectWebUrl String?
+  notesCount     Int       @default(0)
   changesCount   Int?
   additions      Int?
   deletions      Int?
@@ -100,77 +266,96 @@ model GitlabMR {
   targetBranch   String?
   mrCreatedAt    String
   mrMergedAt     String?
-  reviewLeadTime Int? // 리뷰 소요 시간 (초)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  syncedAt       DateTime @default(now())
+  reviewLeadTime Int?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  syncedAt       DateTime  @default(now())
 
   notes GitlabNote[]
 
-  @@unique([mrIid, projectId])
+  @@unique([workspaceId, mrIid, projectId, sourceProjectKey])
+  @@index([workspaceId, authorId])
+  @@index([workspaceId, projectId])
+  @@index([workspaceId, projectId, sourceProjectKey])
 }
 
 /// GitLab MR 코멘트
 model GitlabNote {
-  id          String   @id @default(cuid())
-  noteId      Int
-  mrId        String
-  mr          GitlabMR @relation(fields: [mrId], references: [id])
-  body        String
-  authorId    String?
-  author      Developer? @relation(fields: [authorId], references: [id])
-  isSystem    Boolean  @default(false)
-  isResolvable Boolean @default(false)
-  isResolved  Boolean  @default(false)
+  id            String    @id @default(cuid())
+  workspaceId   String    @default("default-workspace")
+  noteId        Int
+  mrId          String
+  mr            GitlabMR  @relation(fields: [mrId], references: [id])
+  body          String
+  authorId      String?
+  author        Developer? @relation(fields: [authorId], references: [id])
+  isSystem      Boolean   @default(false)
+  isResolvable  Boolean   @default(false)
+  isResolved    Boolean   @default(false)
   noteCreatedAt String
-  createdAt   DateTime @default(now())
+  createdAt     DateTime  @default(now())
 
-  @@unique([noteId, mrId])
+  @@unique([workspaceId, noteId, mrId])
+  @@index([workspaceId, authorId])
+  @@index([workspaceId, mrId])
 }
 
 /// 개발자 성과 점수
 model Score {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
+  workspaceId    String    @default("default-workspace")
   developerId    String
   developer      Developer @relation(fields: [developerId], references: [id])
-  period         String // "2026-03" (월별)
-  jiraScore      Float    @default(0)
-  gitlabScore    Float    @default(0)
-  compositeScore Float    @default(0)
-  breakdown      String // JSON 문자열 (SQLite JSON 미지원)
-  calculatedAt   DateTime @default(now())
+  period         String
+  jiraScore      Float     @default(0)
+  gitlabScore    Float     @default(0)
+  compositeScore Float     @default(0)
+  breakdown      String
+  calculatedAt   DateTime  @default(now())
 
-  @@unique([developerId, period])
+  @@unique([workspaceId, developerId, period])
+  @@index([workspaceId, period])
 }
 
 /// 대시보드 레이아웃 저장
 model DashboardLayout {
-  id        String   @id @default(cuid())
-  name      String
-  widgets   String // JSON 문자열 [{type, x, y, w, h, config}]
-  isDefault Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  workspaceId String   @default("default-workspace")
+  name        String
+  widgets     String
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId, isDefault])
 }
 
 /// 스코어링 가중치 설정
 model ScoringWeight {
-  id        String @id @default(cuid())
-  key       String @unique
-  value     Float
-  label     String
-  category  String // "jira" | "gitlab" | "composite"
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  workspaceId String   @default("default-workspace")
+  key         String
+  value       Float
+  label       String
+  category    String
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, key])
+  @@index([workspaceId, category])
 }
 
 /// 데이터 동기화 로그
 model SyncLog {
-  id        String   @id @default(cuid())
-  projectId String
-  project   Project  @relation(fields: [projectId], references: [id])
-  status    String // "running" | "success" | "failed"
-  message   String?
-  itemCount Int      @default(0)
-  startedAt DateTime @default(now())
-  endedAt   DateTime?
+  id          String   @id @default(cuid())
+  workspaceId String   @default("default-workspace")
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id])
+  status      String
+  message     String?
+  itemCount   Int      @default(0)
+  startedAt   DateTime @default(now())
+  endedAt     DateTime?
+
+  @@index([workspaceId, startedAt])
+  @@index([workspaceId, projectId])
 }

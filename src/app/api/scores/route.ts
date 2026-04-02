@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { endOfMonth, format, startOfMonth } from 'date-fns';
+import { requireApiContext } from '@/lib/auth/api';
 import { prisma } from '@/lib/db';
 import { calculateJiraScore, calculateGitlabScore, calculateCompositeScore } from '@/lib/scoring';
 import { DEFAULT_SCORING_WEIGHTS } from '@/common/constants';
 import type { JiraScoreBreakdown, GitlabScoreBreakdown } from '@/lib/scoring';
+import type { ParsedNote } from '@/lib/gitlab/_types';
 
-const SCORE_ALGORITHM_VERSION = 2;
+const SCORE_ALGORITHM_VERSION = 3;
 
 /**
  * GET /api/scores
@@ -16,12 +19,16 @@ const SCORE_ALGORITHM_VERSION = 2;
  */
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireApiContext(request);
+    if (!authResult.ok) return authResult.response;
+
+    const workspaceId = authResult.context.workspace.id;
     const { searchParams } = request.nextUrl;
     const period = searchParams.get('period') ?? new Date().toISOString().slice(0, 7);
     const developerIdsParam = searchParams.get('developerIds');
     const developerIds = developerIdsParam ? developerIdsParam.split(',').filter(Boolean) : undefined;
 
-    const developerWhere: Record<string, unknown> = { isActive: true };
+    const developerWhere: Record<string, unknown> = { workspaceId, isActive: true };
     if (developerIds?.length) {
       developerWhere.id = { in: developerIds };
     }
@@ -40,6 +47,7 @@ export async function GET(request: NextRequest) {
 
     const existingScores = await prisma.score.findMany({
       where: {
+        workspaceId,
         period,
         developerId: { in: targetDeveloperIds },
       },
@@ -55,7 +63,7 @@ export async function GET(request: NextRequest) {
 
     let createdScores: Awaited<ReturnType<typeof calculateScoresOnDemand>> = [];
     if (recomputeDeveloperIds.length > 0) {
-      createdScores = await calculateScoresOnDemand(period, recomputeDeveloperIds);
+      createdScores = await calculateScoresOnDemand(workspaceId, period, recomputeDeveloperIds);
     }
 
     const scoreMap = new Map(
@@ -123,27 +131,137 @@ function getGradeFromComposite(score: number): string {
  * 점수가 없는 기간에 대해 온디맨드로 점수를 계산합니다.
  * Jira 이슈와 GitLab MR 데이터를 기반으로 스코어링 엔진을 실행합니다.
  */
-async function calculateScoresOnDemand(period: string, developerIds?: string[]) {
-  const developerWhere: Record<string, unknown> = { isActive: true };
+async function calculateScoresOnDemand(workspaceId: string, period: string, developerIds?: string[]) {
+  const developerWhere: Record<string, unknown> = { workspaceId, isActive: true };
   if (developerIds?.length) {
     developerWhere.id = { in: developerIds };
   }
 
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const developers: any[] = await prisma.developer.findMany({ where: developerWhere });
+  if (!developers.length) return [];
+
+  const targetDeveloperIds = developers.map((developer) => developer.id);
+  const periodStart = startOfMonth(new Date(`${period}-01T00:00:00`));
+  const periodEnd = endOfMonth(periodStart);
+  const periodStartStr = format(periodStart, 'yyyy-MM-dd');
+  const periodEndStr = format(periodEnd, 'yyyy-MM-dd');
+
+  const [jiraIssues, gitlabMRs] = await prisma.$transaction([
+    prisma.jiraIssue.findMany({
+      where: {
+        workspaceId,
+        assigneeId: { in: targetDeveloperIds },
+        OR: [
+          {
+            AND: [
+              { ganttStartDate: { lte: periodEndStr } },
+              { ganttEndDate: { gte: periodStartStr } },
+            ],
+          },
+          {
+            AND: [
+              { ganttStartDate: { lte: periodEndStr } },
+              { dueDate: { gte: periodStartStr } },
+            ],
+          },
+          { ganttEndDate: { gte: periodStartStr, lte: periodEndStr } },
+          { dueDate: { gte: periodStartStr, lte: periodEndStr } },
+          {
+            AND: [
+              { ganttStartDate: null },
+              { ganttEndDate: null },
+              { dueDate: null },
+              { updatedAt: { gte: periodStart, lte: periodEnd } },
+            ],
+          },
+        ],
+      },
+      select: {
+        id: true,
+        issueKey: true,
+        summary: true,
+        status: true,
+        issueType: true,
+        assigneeId: true,
+        priority: true,
+        storyPoints: true,
+        ganttStartDate: true,
+        ganttEndDate: true,
+        baselineStart: true,
+        baselineEnd: true,
+        ganttProgress: true,
+        plannedEffort: true,
+        actualEffort: true,
+        remainingEffort: true,
+        timeSpent: true,
+        dueDate: true,
+      },
+    }),
+    prisma.gitlabMR.findMany({
+      where: {
+        workspaceId,
+        authorId: { in: targetDeveloperIds },
+        OR: [
+          { mrCreatedAt: { gte: periodStartStr, lte: periodEndStr } },
+          { mrMergedAt: { gte: periodStartStr, lte: periodEndStr } },
+        ],
+      },
+      select: {
+        id: true,
+        mrIid: true,
+        title: true,
+        state: true,
+        authorId: true,
+        notesCount: true,
+        changesCount: true,
+        additions: true,
+        deletions: true,
+        sourceBranch: true,
+        targetBranch: true,
+        mrCreatedAt: true,
+        mrMergedAt: true,
+        notes: {
+          where: {
+            noteCreatedAt: { gte: periodStartStr, lte: periodEndStr },
+          },
+          select: {
+            mrId: true,
+            isSystem: true,
+            isResolvable: true,
+            isResolved: true,
+            noteCreatedAt: true,
+          },
+        },
+      },
+    }),
+  ]);
+
+  const jiraIssuesByDeveloper = new Map<string, any[]>();
+  const gitlabMrsByDeveloper = new Map<string, any[]>();
+
+  for (const issue of jiraIssues) {
+    if (!issue.assigneeId) continue;
+    const bucket = jiraIssuesByDeveloper.get(issue.assigneeId) ?? [];
+    bucket.push(issue);
+    jiraIssuesByDeveloper.set(issue.assigneeId, bucket);
+  }
+
+  for (const mr of gitlabMRs) {
+    if (!mr.authorId) continue;
+    const bucket = gitlabMrsByDeveloper.get(mr.authorId) ?? [];
+    bucket.push(mr);
+    gitlabMrsByDeveloper.set(mr.authorId, bucket);
+  }
+
+  const mergedMrCount = gitlabMRs.filter((mr) => mr.state === 'merged').length;
+  const teamAvgMergedMrs = mergedMrCount > 0 ? mergedMrCount / developers.length : 0;
   const weights = DEFAULT_SCORING_WEIGHTS;
-  const createdScores = [];
+  const scorePayloads = developers.map((developer) => {
+    const developerJiraIssues = jiraIssuesByDeveloper.get(developer.id) ?? [];
+    const developerGitlabMrs = gitlabMrsByDeveloper.get(developer.id) ?? [];
 
-  for (const developer of developers) {
-    const jiraIssues: any[] = await prisma.jiraIssue.findMany({
-      where: { assigneeId: developer.id },
-    });
-
-    const gitlabMRs: any[] = await prisma.gitlabMR.findMany({
-      where: { authorId: developer.id },
-    });
-
-    const parsedJiraIssues = jiraIssues.map((issue: any) => ({
+    const parsedJiraIssues = developerJiraIssues.map((issue: any) => ({
       id: issue.id,
       key: issue.issueKey,
       summary: issue.summary,
@@ -169,12 +287,14 @@ async function calculateScoresOnDemand(period: string, developerIds?: string[]) 
       plannedEffort: issue.plannedEffort,
       actualEffort: issue.actualEffort,
       remainingEffort: issue.remainingEffort,
+      timeSpent: issue.timeSpent,
+      dueDate: issue.dueDate,
       created: '',
       updated: '',
       resolutionDate: null,
     }));
 
-    const parsedMRs = gitlabMRs.map((mr: any) => ({
+    const parsedMRs = developerGitlabMrs.map((mr: any) => ({
       iid: mr.mrIid,
       title: mr.title,
       state: mr.state,
@@ -191,35 +311,82 @@ async function calculateScoresOnDemand(period: string, developerIds?: string[]) 
       labels: [] as string[],
       isDraft: false,
       webUrl: '',
+      notes: mr.notes.map((note: any): ParsedNote => ({
+        id: note.mrId,
+        body: '',
+        authorUsername: '',
+        authorName: '',
+        createdAt: note.noteCreatedAt,
+        isReviewComment: !note.isSystem,
+        isResolvable: note.isResolvable,
+        isResolved: note.isResolved,
+      })),
     }));
 
-    const jiraScore = calculateJiraScore(parsedJiraIssues as never[], [], weights.jira);
-    const gitlabScore = calculateGitlabScore(parsedMRs as never[], [], [], weights.gitlab);
+    const jiraScore = calculateJiraScore(
+      parsedJiraIssues as never[],
+      parsedJiraIssues
+        .filter((issue) => (issue.timeSpent ?? 0) > 0 || (issue.actualEffort ?? 0) > 0)
+        .map((issue) => ({ issueKey: issue.key })),
+      weights.jira,
+    );
+    const gitlabScore = calculateGitlabScore(
+      parsedMRs as never[],
+      parsedMRs.flatMap((mr) =>
+        mr.notes.map((note: ParsedNote) => ({ mrId: mr.iid.toString(), isSystem: !note.isReviewComment })),
+      ),
+      [],
+      weights.gitlab,
+      teamAvgMergedMrs,
+    );
     const composite = calculateCompositeScore(jiraScore, gitlabScore, weights, period);
 
-    const score = await prisma.score.upsert({
-      where: { developerId_period: { developerId: developer.id, period } },
-      update: {
-        jiraScore: jiraScore.total,
-        gitlabScore: gitlabScore.total,
-        compositeScore: composite.composite,
-        breakdown: JSON.stringify({ version: SCORE_ALGORITHM_VERSION, jira: jiraScore, gitlab: gitlabScore }),
-        calculatedAt: new Date(),
-      },
-      create: {
-        developerId: developer.id,
-        period,
-        jiraScore: jiraScore.total,
-        gitlabScore: gitlabScore.total,
-        compositeScore: composite.composite,
-        breakdown: JSON.stringify({ version: SCORE_ALGORITHM_VERSION, jira: jiraScore, gitlab: gitlabScore }),
-      },
-      include: { developer: true },
-    });
+    return {
+      developerId: developer.id,
+      jiraScore: jiraScore.total,
+      gitlabScore: gitlabScore.total,
+      compositeScore: composite.composite,
+      breakdown: JSON.stringify({ version: SCORE_ALGORITHM_VERSION, jira: jiraScore, gitlab: gitlabScore }),
+    };
+  });
 
-    createdScores.push(score);
-  }
+  await prisma.$transaction(
+    scorePayloads.map((payload) =>
+      prisma.score.upsert({
+        where: {
+          workspaceId_developerId_period: {
+            workspaceId,
+            developerId: payload.developerId,
+            period,
+          },
+        },
+        update: {
+          jiraScore: payload.jiraScore,
+          gitlabScore: payload.gitlabScore,
+          compositeScore: payload.compositeScore,
+          breakdown: payload.breakdown,
+          calculatedAt: new Date(),
+        },
+        create: {
+          workspaceId,
+          developerId: payload.developerId,
+          period,
+          jiraScore: payload.jiraScore,
+          gitlabScore: payload.gitlabScore,
+          compositeScore: payload.compositeScore,
+          breakdown: payload.breakdown,
+        },
+      }),
+    ),
+  );
 
   /* eslint-enable @typescript-eslint/no-explicit-any */
-  return createdScores;
+  return prisma.score.findMany({
+    where: {
+      workspaceId,
+      period,
+      developerId: { in: targetDeveloperIds },
+    },
+    include: { developer: true },
+  });
 }

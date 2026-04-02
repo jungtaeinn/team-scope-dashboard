@@ -32,6 +32,8 @@ export interface WidgetGridProps {
    * @returns 렌더링할 React 노드
    */
   renderWidget?: (widget: WidgetConfig) => ReactNode;
+  /** 위젯 헤더 우측 액션 렌더 */
+  renderHeaderAction?: (widget: WidgetConfig) => ReactNode;
   /** 레이아웃 변경 콜백 */
   onLayoutChange?: (layouts: LayoutItem[]) => void;
   /** 추가 CSS 클래스 */
@@ -49,6 +51,7 @@ export function WidgetGrid({
   initialWidgets = [],
   initialLayouts = [],
   renderWidget,
+  renderHeaderAction,
   onLayoutChange,
   className,
 }: WidgetGridProps) {
@@ -242,6 +245,7 @@ export function WidgetGrid({
               title={widget.title}
               mode={mode}
               contentScrollable={widget.type !== 'score-gauge' && widget.type !== 'gantt-chart'}
+              headerAction={renderHeaderAction?.(widget)}
               onDuplicate={duplicateWidget}
               onMaximize={maximizeWidget}
               onRemove={removeWidget}

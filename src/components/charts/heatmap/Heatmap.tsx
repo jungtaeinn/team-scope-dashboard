@@ -10,6 +10,8 @@ export interface HeatmapPeriod {
   period: string;
   /** 해당 기간의 값 */
   value: number;
+  /** 툴팁/셀에 표시할 원본 값 */
+  rawValue?: number;
 }
 
 /** 히트맵 데이터 행 (개발자 1명) */
@@ -71,7 +73,7 @@ function getTextColor(ratio: number): string {
  * 마우스 호버 시 정확한 값을 툴팁으로 표시합니다.
  */
 export function Heatmap({ data, title, className, valueLabel = '값', onCellClick }: HeatmapProps) {
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; developer: string; period: string; value: number } | null>(null);
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; developer: string; period: string; value: number; rawValue?: number } | null>(null);
 
   const periods = useMemo(() => {
     if (!data.length) return [];
@@ -86,7 +88,7 @@ export function Heatmap({ data, title, className, valueLabel = '값', onCellClic
     };
   }, [data]);
 
-  const handleMouseEnter = useCallback((e: React.MouseEvent, developer: string, period: string, value: number) => {
+  const handleMouseEnter = useCallback((e: React.MouseEvent, developer: string, period: string, value: number, rawValue?: number) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const parentRect = e.currentTarget.closest('[data-heatmap-root]')?.getBoundingClientRect();
     if (!parentRect) return;
@@ -97,6 +99,7 @@ export function Heatmap({ data, title, className, valueLabel = '값', onCellClic
       developer,
       period,
       value,
+      rawValue,
     });
   }, []);
 
@@ -141,11 +144,11 @@ export function Heatmap({ data, title, className, valueLabel = '값', onCellClic
                     getTextColor(ratio),
                     onCellClick && 'cursor-pointer',
                   )}
-                  onMouseEnter={(e) => handleMouseEnter(e, row.developer, cell.period, cell.value)}
+                  onMouseEnter={(e) => handleMouseEnter(e, row.developer, cell.period, cell.value, cell.rawValue)}
                   onMouseLeave={handleMouseLeave}
                   onClick={() => onCellClick?.(row.developer, cell.period, cell.value)}
                 >
-                  {cell.value}
+                  {cell.rawValue ?? cell.value}
                 </div>
               );
             })}
@@ -161,8 +164,13 @@ export function Heatmap({ data, title, className, valueLabel = '값', onCellClic
             <p className="text-xs font-semibold text-[var(--popover-foreground)]">{tooltip.developer}</p>
             <p className="text-[11px] text-[var(--muted-foreground)]">{tooltip.period}</p>
             <p className="text-xs text-[var(--muted-foreground)]">
-              {valueLabel}: <span className="font-medium text-[var(--popover-foreground)]">{tooltip.value}</span>
+              {valueLabel}: <span className="font-medium text-[var(--popover-foreground)]">{tooltip.rawValue ?? tooltip.value}</span>
             </p>
+            {tooltip.rawValue != null ? (
+              <p className="text-[11px] text-[var(--muted-foreground)]">
+                상대 지수: <span className="font-medium text-[var(--popover-foreground)]">{tooltip.value}</span>
+              </p>
+            ) : null}
           </div>
         )}
       </div>

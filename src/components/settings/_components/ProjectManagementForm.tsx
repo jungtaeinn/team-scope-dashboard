@@ -13,6 +13,7 @@ import {
   XCircle,
   ChevronDown,
   ExternalLink,
+  PlugZap,
 } from 'lucide-react';
 
 interface ProjectConfig {
@@ -77,6 +78,8 @@ export function ProjectManagementForm() {
   const [testStatus, setTestStatus] = useState<TestStatus>('idle');
   const [testMessage, setTestMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [rowTestStatus, setRowTestStatus] = useState<Record<string, TestStatus>>({});
+  const [rowTestMessage, setRowTestMessage] = useState<Record<string, string>>({});
 
   const loadProjects = useCallback(async () => {
     setIsLoading(true);
@@ -192,6 +195,31 @@ export function ProjectManagementForm() {
     }
   }, [loadProjects]);
 
+  const handleTestStoredConnection = useCallback(async (project: ProjectConfig) => {
+    setRowTestStatus((prev) => ({ ...prev, [project.id]: 'testing' }));
+    setRowTestMessage((prev) => ({ ...prev, [project.id]: '' }));
+
+    try {
+      const res = await fetch('/api/projects/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: project.id }),
+      });
+      const data = (await res.json()) as ApiResponse<unknown>;
+
+      if (data.success) {
+        setRowTestStatus((prev) => ({ ...prev, [project.id]: 'success' }));
+        setRowTestMessage((prev) => ({ ...prev, [project.id]: data.message ?? '연결 성공' }));
+      } else {
+        setRowTestStatus((prev) => ({ ...prev, [project.id]: 'fail' }));
+        setRowTestMessage((prev) => ({ ...prev, [project.id]: data.error ?? '연결 실패' }));
+      }
+    } catch {
+      setRowTestStatus((prev) => ({ ...prev, [project.id]: 'fail' }));
+      setRowTestMessage((prev) => ({ ...prev, [project.id]: '연결 테스트 중 오류가 발생했습니다.' }));
+    }
+  }, []);
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -254,9 +282,14 @@ export function ProjectManagementForm() {
                 type="url"
                 value={form.baseUrl}
                 onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))}
-                placeholder="https://jira.example.com"
+                placeholder={form.type === 'jira' ? 'https://jira.example.com' : 'https://gitlab.example.com/group/project'}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
               />
+              {form.type === 'gitlab' ? (
+                <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                  GitLab은 프로젝트 URL 또는 그룹 URL을 지원합니다. 예: `https://gitlab.example.com/group/project`, `https://gitlab.example.com/groups/team-group`
+                </p>
+              ) : null}
             </div>
             <div>
               <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">토큰</label>
@@ -274,25 +307,23 @@ export function ProjectManagementForm() {
                 type="text"
                 value={form.projectKey}
                 onChange={(e) => setForm((f) => ({ ...f, projectKey: e.target.value }))}
-                placeholder={form.type === 'jira' ? 'APM' : '907'}
+                placeholder={form.type === 'jira' ? 'APM' : 'group/project, group-path 또는 numeric id'}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
               />
             </div>
           </div>
 
-          {testStatus !== 'idle' && (
+          {testStatus !== 'idle' && testStatus !== 'testing' && (
             <div
               className={cn(
                 'mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm',
                 testStatus === 'success' && 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400',
                 testStatus === 'fail' && 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400',
-                testStatus === 'testing' && 'bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-400',
               )}
             >
-              {testStatus === 'testing' && <Loader2 className="h-4 w-4 animate-spin" />}
               {testStatus === 'success' && <CheckCircle2 className="h-4 w-4" />}
               {testStatus === 'fail' && <XCircle className="h-4 w-4" />}
-              {testStatus === 'testing' ? '연결 테스트 중...' : testMessage}
+              {testMessage}
             </div>
           )}
 
@@ -308,7 +339,7 @@ export function ProjectManagementForm() {
               )}
             >
               {testStatus === 'testing' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-              연결 테스트
+              {testStatus === 'testing' ? '연결 확인 중' : '연결 테스트'}
             </button>
             <button
               type="button"
@@ -335,36 +366,68 @@ export function ProjectManagementForm() {
             <div
               key={project.id}
               className={cn(
-                'flex items-center justify-between rounded-lg border p-4 transition-colors',
+                'rounded-lg border p-4 transition-colors',
                 project.isActive
                   ? 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900'
                   : 'border-gray-100 bg-gray-50 opacity-60 dark:border-gray-800 dark:bg-gray-900/50',
               )}
             >
-              <div className="flex items-center gap-3">
-                <TypeBadge type={project.type} />
-                <div>
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{project.name}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {project.baseUrl} · {project.projectKey}
-                  </p>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <TypeBadge type={project.type} />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{project.name}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      {project.baseUrl} · {project.projectKey}
+                    </p>
+                    {rowTestStatus[project.id] && rowTestStatus[project.id] !== 'idle' && rowTestStatus[project.id] !== 'testing' ? (
+                      <div
+                        className={cn(
+                          'mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px]',
+                          rowTestStatus[project.id] === 'success' && 'bg-green-500/10 text-green-400',
+                          rowTestStatus[project.id] === 'fail' && 'bg-red-500/10 text-red-400',
+                        )}
+                      >
+                        {rowTestStatus[project.id] === 'success' ? (
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                        ) : (
+                          <XCircle className="h-3.5 w-3.5" />
+                        )}
+                        <span>{rowTestMessage[project.id]}</span>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => handleStartEdit(project)}
-                  className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-blue-600 dark:hover:bg-gray-800"
-                >
-                  <Pencil className="h-4 w-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(project.id)}
-                  className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600 dark:hover:bg-gray-800"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleTestStoredConnection(project)}
+                    disabled={rowTestStatus[project.id] === 'testing'}
+                    className="rounded p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-gray-800"
+                    title="연결 테스트"
+                    aria-label={`${project.name} 연결 테스트`}
+                  >
+                    {rowTestStatus[project.id] === 'testing' ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlugZap className="h-4 w-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleStartEdit(project)}
+                    className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-blue-600 dark:hover:bg-gray-800"
+                    title="수정"
+                    aria-label={`${project.name} 수정`}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(project.id)}
+                    className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600 dark:hover:bg-gray-800"
+                    title="삭제"
+                    aria-label={`${project.name} 삭제`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             </div>
           ))

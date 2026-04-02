@@ -30,12 +30,13 @@ interface DeveloperScoreData {
  */
 export function useDeveloperScores(options?: UseDeveloperScoresOptions) {
   const { period, developerIds } = options ?? {};
+  const effectivePeriod = period ?? new Date().toISOString().slice(0, 7);
 
   return useQuery<DeveloperScoreData[]>({
-    queryKey: ['developer-scores', period, developerIds],
+    queryKey: ['developer-scores', effectivePeriod, developerIds],
     queryFn: async () => {
       const params = new URLSearchParams();
-      if (period) params.set('period', period);
+      params.set('period', effectivePeriod);
       if (developerIds?.length) params.set('developerIds', developerIds.join(','));
 
       const res = await fetch(`/api/scores?${params.toString()}`);
@@ -46,6 +47,9 @@ export function useDeveloperScores(options?: UseDeveloperScoresOptions) {
 
       return json.data;
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 15 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 }

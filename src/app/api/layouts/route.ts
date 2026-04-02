@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireApiContext } from '@/lib/auth/api';
 import { prisma } from '@/lib/db';
 
 /** 레이아웃 저장 요청 바디 */
@@ -17,9 +18,13 @@ interface LayoutBody {
  * GET /api/layouts
  * 저장된 대시보드 레이아웃 목록을 반환합니다.
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireApiContext(request);
+    if (!authResult.ok) return authResult.response;
+
     const layouts = await prisma.dashboardLayout.findMany({
+      where: { workspaceId: authResult.context.workspace.id },
       orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
     });
 
@@ -46,7 +51,11 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await requireApiContext(request, ['owner', 'maintainer']);
+    if (!authResult.ok) return authResult.response;
+
     const body = (await request.json()) as LayoutBody;
+    const workspaceId = authResult.context.workspace.id;
 
     if (!body.name?.trim()) {
       return NextResponse.json(
@@ -64,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     if (body.isDefault) {
       await prisma.dashboardLayout.updateMany({
-        where: { isDefault: true },
+        where: { workspaceId, isDefault: true },
         data: { isDefault: false },
       });
     }
@@ -73,9 +82,22 @@ export async function POST(request: NextRequest) {
     let layout;
 
     if (body.id) {
+      const existing = await prisma.dashboardLayout.findFirst({
+        where: { id: body.id, workspaceId },
+        select: { id: true },
+      });
+
+      if (!existing) {
+        return NextResponse.json(
+          { success: false, data: null, error: '수정할 레이아웃을 찾을 수 없습니다.' },
+          { status: 404 },
+        );
+      }
+
       layout = await prisma.dashboardLayout.update({
         where: { id: body.id },
         data: {
+          workspaceId,
           name: body.name.trim(),
           widgets: widgetsJson,
           isDefault: body.isDefault ?? false,
@@ -84,6 +106,7 @@ export async function POST(request: NextRequest) {
     } else {
       layout = await prisma.dashboardLayout.create({
         data: {
+          workspaceId,
           name: body.name.trim(),
           widgets: widgetsJson,
           isDefault: body.isDefault ?? false,

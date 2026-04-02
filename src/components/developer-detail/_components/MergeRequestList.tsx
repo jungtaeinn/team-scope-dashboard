@@ -9,6 +9,7 @@ interface MergeRequest {
   id: string;
   mrIid: number;
   title: string;
+  mrUrl?: string;
   state: string;
   notesCount: number;
   mrCreatedAt: string;
@@ -60,6 +61,11 @@ function leadTimeDays(createdAt: string, mergedAt: string | null): number {
 type SortKey = 'mrIid' | 'title' | 'state' | 'notesCount' | 'mrCreatedAt' | 'mrMergedAt' | 'leadTime';
 type SortDir = 'asc' | 'desc';
 
+function renderSortIcon(column: SortKey, sortKey: SortKey, sortDir: SortDir) {
+  if (sortKey !== column) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
+  return sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />;
+}
+
 /**
  * MR 목록 테이블 컴포넌트
  * @description 개발자별 실데이터 MR을 표 형태로 표시
@@ -88,11 +94,6 @@ export function MergeRequestList({ developerId, className }: { developerId: stri
     setSortKey(key);
     setSortDir('desc');
   }, [sortKey]);
-
-  const SortIcon = useCallback(({ column }: { column: SortKey }) => {
-    if (sortKey !== column) return <ArrowUpDown className="h-3 w-3 opacity-40" />;
-    return sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />;
-  }, [sortDir, sortKey]);
 
   const sortedData = useMemo(() => {
     const rows = [...(data ?? [])];
@@ -145,43 +146,43 @@ export function MergeRequestList({ developerId, className }: { developerId: stri
               <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted-foreground)]">
                 <button type="button" onClick={() => handleSort('mrIid')} className="inline-flex items-center gap-1 hover:text-[var(--foreground)]">
                   MR번호
-                  <SortIcon column="mrIid" />
+                  {renderSortIcon('mrIid', sortKey, sortDir)}
                 </button>
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted-foreground)]">
                 <button type="button" onClick={() => handleSort('title')} className="inline-flex items-center gap-1 hover:text-[var(--foreground)]">
                   제목
-                  <SortIcon column="title" />
+                  {renderSortIcon('title', sortKey, sortDir)}
                 </button>
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted-foreground)]">
                 <button type="button" onClick={() => handleSort('state')} className="inline-flex items-center gap-1 hover:text-[var(--foreground)]">
                   상태
-                  <SortIcon column="state" />
+                  {renderSortIcon('state', sortKey, sortDir)}
                 </button>
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted-foreground)]">
                 <button type="button" onClick={() => handleSort('notesCount')} className="inline-flex items-center gap-1 hover:text-[var(--foreground)]">
                   코멘트
-                  <SortIcon column="notesCount" />
+                  {renderSortIcon('notesCount', sortKey, sortDir)}
                 </button>
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted-foreground)]">
                 <button type="button" onClick={() => handleSort('mrCreatedAt')} className="inline-flex items-center gap-1 hover:text-[var(--foreground)]">
                   생성일
-                  <SortIcon column="mrCreatedAt" />
+                  {renderSortIcon('mrCreatedAt', sortKey, sortDir)}
                 </button>
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted-foreground)]">
                 <button type="button" onClick={() => handleSort('mrMergedAt')} className="inline-flex items-center gap-1 hover:text-[var(--foreground)]">
                   머지일
-                  <SortIcon column="mrMergedAt" />
+                  {renderSortIcon('mrMergedAt', sortKey, sortDir)}
                 </button>
               </th>
               <th className="px-4 py-3 text-left text-xs font-semibold text-[var(--muted-foreground)]">
                 <button type="button" onClick={() => handleSort('leadTime')} className="inline-flex items-center gap-1 hover:text-[var(--foreground)]">
                   리드타임
-                  <SortIcon column="leadTime" />
+                  {renderSortIcon('leadTime', sortKey, sortDir)}
                 </button>
               </th>
             </tr>
@@ -189,8 +190,36 @@ export function MergeRequestList({ developerId, className }: { developerId: stri
           <tbody>
             {sortedData.map((mr) => (
               <tr key={mr.id} className="border-b transition-colors last:border-b-0 hover:bg-[var(--accent)]">
-                <td className="px-4 py-3 font-mono text-xs font-semibold text-[var(--primary)]">!{mr.mrIid}</td>
-                <td className="max-w-xs truncate px-4 py-3 text-[var(--card-foreground)]">{mr.title}</td>
+                <td className="px-4 py-3 font-mono text-xs font-semibold text-[var(--primary)]">
+                  {mr.mrUrl ? (
+                    <a
+                      href={mr.mrUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="transition-colors hover:text-[var(--foreground)] hover:underline"
+                      title={`!${mr.mrIid} 새 창으로 열기`}
+                    >
+                      !{mr.mrIid}
+                    </a>
+                  ) : (
+                    <>!{mr.mrIid}</>
+                  )}
+                </td>
+                <td className="max-w-xs truncate px-4 py-3 text-[var(--card-foreground)]">
+                  {mr.mrUrl ? (
+                    <a
+                      href={mr.mrUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="transition-colors hover:text-[var(--primary)] hover:underline"
+                      title={`${mr.title} 새 창으로 열기`}
+                    >
+                      {mr.title}
+                    </a>
+                  ) : (
+                    mr.title
+                  )}
+                </td>
                 <td className="px-4 py-3">
                   <span
                     className={cn(

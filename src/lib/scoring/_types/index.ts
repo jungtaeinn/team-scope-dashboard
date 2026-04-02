@@ -4,10 +4,10 @@ export interface JiraScoreBreakdown {
   ticketCompletionRate: number;
   /** 일정 준수율 점수 (0~25) */
   scheduleAdherence: number;
-  /** 공수 정확도 점수 (0~25) */
-  effortAccuracy: number;
-  /** 작업일지 성실도 점수 (0~25) */
-  worklogDiligence: number;
+  /** 공수 정확도 점수 (0~25, 미평가 가능) */
+  effortAccuracy: number | null;
+  /** 작업일지 성실도 점수 (0~25, 미평가 가능) */
+  worklogDiligence: number | null;
   /** Jira 총점 (0~100) */
   total: number;
 }

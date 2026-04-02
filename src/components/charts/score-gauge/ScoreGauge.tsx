@@ -12,6 +12,7 @@ interface ScoreGaugeProps extends ChartProps {
   label: string;
   maxScore?: number;
   size?: GaugeSize;
+  helperText?: string;
 }
 
 const SIZE_CONFIG: Record<
@@ -33,7 +34,7 @@ function getGaugeColor(ratio: number): string {
  * 반원형 점수 게이지 컴포넌트
  * @description viewBox 기반으로 부모 크기에 반응형 렌더링
  */
-export function ScoreGauge({ score, label, maxScore = 100, size = 'md', className }: ScoreGaugeProps) {
+export function ScoreGauge({ score, label, maxScore = 100, size = 'md', helperText, className }: ScoreGaugeProps) {
   const [animatedRatio, setAnimatedRatio] = useState(0);
   const rafRef = useRef<number>(0);
 
@@ -124,6 +125,11 @@ export function ScoreGauge({ score, label, maxScore = 100, size = 'md', classNam
       >
         {label}
       </span>
+      {helperText ? (
+        <span className="mt-1 max-w-full text-center text-[10px] leading-relaxed text-[var(--muted-foreground)]">
+          {helperText}
+        </span>
+      ) : null}
     </div>
   );
 }

@@ -15,7 +15,7 @@ interface ScoreBreakdownProps {
 
 interface ScoreItem {
   label: string;
-  value: number;
+  value: number | null;
   max: number;
 }
 
@@ -45,18 +45,18 @@ const JIRA_CRITERIA: ScoreCriteria[] = [
   },
   {
     label: '일정 준수율',
-    description: 'WBSGantt 기준선(Baseline) 대비 실제 완료일의 지연 일수',
+    description: 'WBSGantt 시작일/종료일 대비 현재 또는 완료 시점의 진행률 차이',
     maxPoints: 25,
     rows: [
-      { condition: '기한 내 완료 (0일 이하)', score: '100% → 25점' },
-      { condition: '1~3일 지연', score: '70% → 17.5점' },
-      { condition: '4~7일 지연', score: '40% → 10점' },
-      { condition: '7일 초과 지연', score: '10% → 2.5점' },
+      { condition: '예상 진행 대비 지연 10%p 이내', score: '100% → 25점' },
+      { condition: '지연 11~25%p', score: '70% → 17.5점' },
+      { condition: '지연 26~40%p', score: '40% → 10점' },
+      { condition: '지연 40%p 초과', score: '10% → 2.5점' },
     ],
   },
   {
     label: '공수 정확도',
-    description: '계획 공수(Original Estimate) 대비 실제 투입 공수의 편차',
+    description: '계획 공수 대비 실제 기록 공수의 편차 (없으면 Gantt 기간·기록 시간으로 보완)',
     maxPoints: 25,
     rows: [
       { condition: '편차 10% 이내', score: '100% → 25점' },
@@ -67,7 +67,7 @@ const JIRA_CRITERIA: ScoreCriteria[] = [
   },
   {
     label: '작업일지 성실도',
-    description: '완료된 이슈 중 워크로그(작업 기록)가 등록된 이슈의 비율',
+    description: '완료된 이슈 중 워크로그 또는 기록 시간이 등록된 이슈의 비율',
     maxPoints: 25,
     rows: [
       { condition: '워크로그 등록 100%', score: '25점 (만점)' },
@@ -143,19 +143,33 @@ function getBarColor(ratio: number): string {
 }
 
 function ScoreProgressItem({ label, value, max }: ScoreItem) {
-  const ratio = max > 0 ? value / max : 0;
+  const isUnavailable = value == null;
+  const safeValue = isUnavailable ? 0 : value;
+  const ratio = max > 0 ? safeValue / max : 0;
   const percent = Math.round(ratio * 100);
 
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-xs">
         <span className="font-medium text-[var(--card-foreground)]">{label}</span>
-        <span className="text-[var(--muted-foreground)]">
-          {value.toFixed(1)} / {max}
-        </span>
+        {isUnavailable ? (
+          <span className="rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] font-medium text-[var(--muted-foreground)]">
+            미평가
+          </span>
+        ) : (
+          <span className="text-[var(--muted-foreground)]">
+            {safeValue.toFixed(1)} / {max}
+          </span>
+        )}
       </div>
       <div className="h-2 overflow-hidden rounded-full bg-[var(--muted)]">
-        <div className={cn('h-full rounded-full transition-all duration-500', getBarColor(ratio))} style={{ width: `${percent}%` }} />
+        <div
+          className={cn(
+            'h-full rounded-full transition-all duration-500',
+            isUnavailable ? 'bg-slate-500/40' : getBarColor(ratio),
+          )}
+          style={{ width: `${isUnavailable ? 18 : percent}%` }}
+        />
       </div>
     </div>
   );
@@ -164,11 +178,6 @@ function ScoreProgressItem({ label, value, max }: ScoreItem) {
 /** 채점 기준 모달 (Portal 렌더링) */
 function CriteriaModal({ criteria, onClose }: { criteria: ScoreCriteria[]; onClose: () => void }) {
   const contentRef = useRef<HTMLDivElement>(null);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -191,7 +200,7 @@ function CriteriaModal({ criteria, onClose }: { criteria: ScoreCriteria[]; onClo
     [onClose],
   );
 
-  if (!mounted) return null;
+  if (typeof document === 'undefined') return null;
 
   return createPortal(
     <div

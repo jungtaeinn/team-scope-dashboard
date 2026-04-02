@@ -1,6 +1,7 @@
 'use client';
 
-import { Legend, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, ResponsiveContainer, Tooltip } from 'recharts';
+import { useEffect, useRef, useState } from 'react';
+import { Legend, PolarAngleAxis, PolarGrid, PolarRadiusAxis, Radar, RadarChart, Tooltip } from 'recharts';
 import { cn } from '@/lib/utils';
 import type { ChartProps } from '@/components/charts/_types';
 
@@ -55,30 +56,61 @@ function RadarTooltip({
  * 여러 개발자의 역량 점수를 레이더(방사형) 차트로 오버레이하여 비교합니다.
  */
 export function TeamRadarChart({ data, developers, className }: TeamRadarChartProps) {
+  const [chartSize, setChartSize] = useState({ width: 0, height: 0 });
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const node = containerRef.current;
+    if (!node) return;
+
+    const updateSize = (width: number, height: number) => {
+      setChartSize({
+        width: Math.max(0, Math.round(width)),
+        height: Math.max(0, Math.round(height)),
+      });
+    };
+
+    const rect = node.getBoundingClientRect();
+    updateSize(rect.width, rect.height);
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      updateSize(entry.contentRect.width, entry.contentRect.height);
+    });
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div className={cn('flex flex-col h-full min-h-0', className)}>
-      <ResponsiveContainer width="100%" height="100%" minHeight={200}>
-        <RadarChart data={data} cx="50%" cy="50%" outerRadius="60%">
-          <PolarGrid stroke="var(--border)" />
-          <PolarAngleAxis dataKey="category" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} />
-          <PolarRadiusAxis tick={{ fontSize: 9 }} stroke="var(--border)" domain={[0, 100]} />
-          <Tooltip content={<RadarTooltip />} />
-          {developers.map((dev, i) => (
-            <Radar
-              key={dev}
-              name={dev}
-              dataKey={dev}
-              stroke={RADAR_COLORS[i % RADAR_COLORS.length]}
-              fill={RADAR_COLORS[i % RADAR_COLORS.length]}
-              fillOpacity={0.15}
-              strokeWidth={2}
-              animationDuration={600}
-              dot={{ r: 3, fillOpacity: 1 }}
-            />
-          ))}
-          <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
-        </RadarChart>
-      </ResponsiveContainer>
+      <div ref={containerRef} className="min-h-[200px] flex-1">
+        {chartSize.width > 0 && chartSize.height > 0 ? (
+          <RadarChart width={chartSize.width} height={chartSize.height} data={data} cx="50%" cy="50%" outerRadius="60%">
+            <PolarGrid stroke="var(--border)" />
+            <PolarAngleAxis dataKey="category" tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }} />
+            <PolarRadiusAxis tick={{ fontSize: 9 }} stroke="var(--border)" domain={[0, 100]} />
+            <Tooltip content={<RadarTooltip />} />
+            {developers.map((dev, i) => (
+              <Radar
+                key={dev}
+                name={dev}
+                dataKey={dev}
+                stroke={RADAR_COLORS[i % RADAR_COLORS.length]}
+                fill={RADAR_COLORS[i % RADAR_COLORS.length]}
+                fillOpacity={0.15}
+                strokeWidth={2}
+                animationDuration={600}
+                dot={{ r: 3, fillOpacity: 1 }}
+              />
+            ))}
+            <Legend wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+          </RadarChart>
+        ) : (
+          <div className="h-full min-h-[200px] animate-pulse rounded-lg bg-[var(--muted)]/30" />
+        )}
+      </div>
     </div>
   );
 }
