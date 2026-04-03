@@ -14,5 +14,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   const resolvedSearchParams = (await searchParams) ?? {};
 
-  return <LoginPageClient redirectTo={resolvedSearchParams.redirectTo ?? '/'} initialEmail={resolvedSearchParams.email ?? ''} />;
+  return (
+    <LoginPageClient
+      redirectTo={resolvedSearchParams.redirectTo ?? '/'}
+      initialEmail={resolvedSearchParams.email ?? ''}
+      isMagicLinkAvailable={false}
+    />
+  );
 }

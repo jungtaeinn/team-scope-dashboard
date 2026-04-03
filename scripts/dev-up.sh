@@ -136,8 +136,20 @@ else
   log "node_modules가 이미 있어 설치를 생략합니다"
 fi
 
+log "PostgreSQL 관측 기능을 활성화합니다"
+(cd "$ROOT_DIR" && pnpm run db:observability)
+
 log "Prisma 스키마를 반영합니다"
 (cd "$ROOT_DIR" && pnpm exec prisma db push)
+
+log "날짜 정규화 컬럼을 백필합니다"
+(cd "$ROOT_DIR" && pnpm run db:normalize-dates)
+
+log "DB 성능 최적화 인덱스를 적용합니다"
+(cd "$ROOT_DIR" && pnpm run db:optimize)
+
+log "대시보드 materialized view를 준비합니다"
+(cd "$ROOT_DIR" && pnpm run db:analytics:init)
 
 log "기본 데이터를 시드합니다"
 (cd "$ROOT_DIR" && node --experimental-strip-types prisma/seed.ts)

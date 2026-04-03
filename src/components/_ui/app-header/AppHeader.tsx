@@ -54,7 +54,7 @@ export function AppHeader({ userName, role, showSyncButton }: AppHeaderProps) {
   return (
     <>
       <header className="border-b bg-[var(--background)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--background)]/80">
-        <div className="mx-auto flex max-w-7xl items-center justify-end gap-2 px-4 py-3 sm:px-6 lg:px-8">
+        <div className="flex w-full items-center justify-end gap-2 px-4 py-3 sm:px-6 lg:px-8">
           <div
             className={cn(
               'inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm text-[var(--card-foreground)] shadow-sm',

@@ -9,6 +9,7 @@ import {
   analyzeDeveloperIdentityMatch,
   extractCorporateIdentifier,
   extractPrimaryPersonName,
+  normalizeIdentity,
   resolveDeveloperIdentityMatch,
 } from '@/lib/members/identity';
 import { autoMergeWorkspaceDuplicates } from '@/lib/members/duplicates';
@@ -79,6 +80,41 @@ type GitlabTargetResolution =
 
 function toCandidateKey(type: 'jira' | 'gitlab', username: string | null, name: string) {
   return `${type}:${username ?? name}`;
+}
+
+function getCandidateStrength(candidate: ProjectMemberCandidate) {
+  let score = Number(candidate.matchScore ?? 0);
+  if (candidate.jiraUsername) score += 1000;
+  if (candidate.gitlabUsername) score += 1000;
+  if (candidate.corporateIdentifier) score += 500;
+  if (candidate.assigned) score += 50;
+  return score;
+}
+
+function dedupeCandidates(candidates: ProjectMemberCandidate[]) {
+  const bestByResolvedIdentity = new Map<string, ProjectMemberCandidate>();
+
+  for (const candidate of candidates) {
+    const resolvedIdentity = normalizeIdentity(
+      candidate.matchedDeveloperId
+      ?? candidate.corporateIdentifier
+      ?? candidate.jiraUsername
+      ?? candidate.gitlabUsername
+      ?? extractPrimaryPersonName(candidate.name),
+    );
+
+    if (!resolvedIdentity) {
+      bestByResolvedIdentity.set(candidate.key, candidate);
+      continue;
+    }
+
+    const existing = bestByResolvedIdentity.get(resolvedIdentity);
+    if (!existing || getCandidateStrength(candidate) > getCandidateStrength(existing)) {
+      bestByResolvedIdentity.set(resolvedIdentity, candidate);
+    }
+  }
+
+  return [...bestByResolvedIdentity.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
 }
 
 function buildGitlabProjectIdentifierCandidates(baseUrl: string, projectKey: string | null) {
@@ -509,7 +545,7 @@ async function getProjectCandidates(
       }
     }
 
-    return [...members.values()].sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    return dedupeCandidates([...members.values()]);
   }
 
   const envToken = resolveEnvProjectToken('gitlab', project.baseUrl);
@@ -541,7 +577,7 @@ async function getProjectCandidates(
     throw lastGitlabError ?? new Error(`${project.name}의 GitLab 멤버를 조회하지 못했습니다.`);
   }
 
-  return members
+  return dedupeCandidates(members
     .filter((member) => member.state !== 'blocked')
     .map((member) => {
       const matchedDeveloper = resolveMatchedDeveloper({
@@ -575,8 +611,7 @@ async function getProjectCandidates(
         matchScore: matchAnalysis?.score ?? null,
         assigned: matchedDeveloper ? assignedDeveloperIds.has(matchedDeveloper.id) : false,
       } satisfies ProjectMemberCandidate;
-    })
-    .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    }));
 }
 
 export async function GET(request: NextRequest) {

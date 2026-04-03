@@ -64,3 +64,23 @@ body {
   width: 18px;
   height: 18px;
 }
+
+@keyframes flow-lab-edge-dash {
+  from {
+    stroke-dashoffset: 0;
+  }
+  to {
+    stroke-dashoffset: -36;
+  }
+}
+
+.flow-lab-edge-running {
+  animation: flow-lab-edge-dash 1.1s linear infinite;
+}
+
+.flow-lab-grid-background {
+  background-color: #11161f;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(203, 213, 225, 0.17) 1px, transparent 0);
+  background-size: 26px 26px;
+}

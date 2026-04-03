@@ -13,6 +13,7 @@ import {
 import { requireApiContext } from '@/lib/auth/api';
 import { DEFAULT_SCORING_WEIGHTS } from '@/common/constants';
 import { prisma } from '@/lib/db';
+import { getDashboardMonthlySummary } from '@/lib/db/dashboard-monthly-summary';
 import { calculateCompositeScore, calculateGitlabScore, calculateJiraScore } from '@/lib/scoring';
 import type { GitlabScoreBreakdown, JiraScoreBreakdown } from '@/lib/scoring';
 
@@ -88,15 +89,20 @@ type JiraIssueRecord = {
   storyPoints: number | null;
   sprintName: string | null;
   ganttStartDate: string | null;
+  ganttStartOn: Date | null;
   ganttEndDate: string | null;
+  ganttEndOn: Date | null;
   baselineStart: string | null;
+  baselineStartOn: Date | null;
   baselineEnd: string | null;
+  baselineEndOn: Date | null;
   ganttProgress: number | null;
   plannedEffort: number | null;
   actualEffort: number | null;
   remainingEffort: number | null;
   timeSpent: number | null;
   dueDate: string | null;
+  dueOn: Date | null;
   updatedAt: Date;
   assigneeId: string | null;
 };
@@ -110,6 +116,7 @@ type GitlabNoteRecord = {
   isResolvable: boolean;
   isResolved: boolean;
   noteCreatedAt: string;
+  noteCreatedAtTs: Date | null;
   createdAt: Date;
 };
 
@@ -126,7 +133,9 @@ type GitlabMrRecord = {
   sourceBranch: string | null;
   targetBranch: string | null;
   mrCreatedAt: string;
+  mrCreatedAtTs: Date | null;
   mrMergedAt: string | null;
+  mrMergedAtTs: Date | null;
   createdAt: Date;
   notes: GitlabNoteRecord[];
 };
@@ -456,9 +465,6 @@ export async function GET(request: NextRequest) {
     const projectFilter = projectIds.length ? { projectId: { in: projectIds } } : {};
     const overallRangeStart = startOfMonth(from);
     const overallRangeEnd = endOfMonth(to);
-    const overallRangeStartStr = format(overallRangeStart, 'yyyy-MM-dd');
-    const overallRangeEndStr = format(overallRangeEnd, 'yyyy-MM-dd');
-
     const [jiraIssues, gitlabMrs, gitlabReviewNotes] = await Promise.all([
       prisma.jiraIssue.findMany({
         where: {
@@ -469,18 +475,18 @@ export async function GET(request: NextRequest) {
             { updatedAt: { gte: overallRangeStart, lte: overallRangeEnd } },
             {
               AND: [
-                { ganttStartDate: { lte: overallRangeEndStr } },
-                { ganttEndDate: { gte: overallRangeStartStr } },
+                { ganttStartOn: { lte: overallRangeEnd } },
+                { ganttEndOn: { gte: overallRangeStart } },
               ],
             },
             {
               AND: [
-                { ganttStartDate: { lte: overallRangeEndStr } },
-                { dueDate: { gte: overallRangeStartStr } },
+                { ganttStartOn: { lte: overallRangeEnd } },
+                { dueOn: { gte: overallRangeStart } },
               ],
             },
-            { ganttEndDate: { gte: overallRangeStartStr, lte: overallRangeEndStr } },
-            { dueDate: { gte: overallRangeStartStr, lte: overallRangeEndStr } },
+            { ganttEndOn: { gte: overallRangeStart, lte: overallRangeEnd } },
+            { dueOn: { gte: overallRangeStart, lte: overallRangeEnd } },
           ],
         },
         select: {
@@ -493,15 +499,20 @@ export async function GET(request: NextRequest) {
           storyPoints: true,
           sprintName: true,
           ganttStartDate: true,
+          ganttStartOn: true,
           ganttEndDate: true,
+          ganttEndOn: true,
           baselineStart: true,
+          baselineStartOn: true,
           baselineEnd: true,
+          baselineEndOn: true,
           ganttProgress: true,
           plannedEffort: true,
           actualEffort: true,
           remainingEffort: true,
           timeSpent: true,
           dueDate: true,
+          dueOn: true,
           updatedAt: true,
           assigneeId: true,
         },
@@ -512,8 +523,8 @@ export async function GET(request: NextRequest) {
           authorId: { in: targetDeveloperIds },
           ...projectFilter,
           OR: [
-            { mrCreatedAt: { gte: overallRangeStartStr, lte: overallRangeEndStr } },
-            { mrMergedAt: { gte: overallRangeStartStr, lte: overallRangeEndStr } },
+            { mrCreatedAtTs: { gte: overallRangeStart, lte: overallRangeEnd } },
+            { mrMergedAtTs: { gte: overallRangeStart, lte: overallRangeEnd } },
           ],
         },
         select: {
@@ -529,11 +540,13 @@ export async function GET(request: NextRequest) {
           sourceBranch: true,
           targetBranch: true,
           mrCreatedAt: true,
+          mrCreatedAtTs: true,
           mrMergedAt: true,
+          mrMergedAtTs: true,
           createdAt: true,
           notes: {
             where: {
-              noteCreatedAt: { gte: overallRangeStartStr, lte: overallRangeEndStr },
+              noteCreatedAtTs: { gte: overallRangeStart, lte: overallRangeEnd },
             },
             select: {
               id: true,
@@ -544,6 +557,7 @@ export async function GET(request: NextRequest) {
               isResolvable: true,
               isResolved: true,
               noteCreatedAt: true,
+              noteCreatedAtTs: true,
               createdAt: true,
             },
           },
@@ -553,7 +567,7 @@ export async function GET(request: NextRequest) {
         where: {
           workspaceId,
           authorId: { in: targetDeveloperIds },
-          noteCreatedAt: { gte: overallRangeStartStr, lte: overallRangeEndStr },
+          noteCreatedAtTs: { gte: overallRangeStart, lte: overallRangeEnd },
           ...(projectIds.length ? { mr: { projectId: { in: projectIds } } } : {}),
         },
         select: {
@@ -565,6 +579,7 @@ export async function GET(request: NextRequest) {
           isResolvable: true,
           isResolved: true,
           noteCreatedAt: true,
+          noteCreatedAtTs: true,
           createdAt: true,
         },
       }),
@@ -577,9 +592,9 @@ export async function GET(request: NextRequest) {
       bucket.push({
         ...issue,
         updatedTs: parseTimestamp(issue.updatedAt),
-        ganttStartTs: parseTimestamp(issue.ganttStartDate),
-        ganttEndTs: parseTimestamp(issue.ganttEndDate),
-        dueTs: parseTimestamp(issue.dueDate),
+        ganttStartTs: parseTimestamp(issue.ganttStartOn ?? issue.ganttStartDate),
+        ganttEndTs: parseTimestamp(issue.ganttEndOn ?? issue.ganttEndDate),
+        dueTs: parseTimestamp(issue.dueOn ?? issue.dueDate),
       });
       jiraIssuesByDeveloper.set(issue.assigneeId, bucket);
     }
@@ -591,14 +606,14 @@ export async function GET(request: NextRequest) {
 
       const indexedNotes = mr.notes.map((note) => ({
         ...note,
-        createdTs: parseTimestamp(note.noteCreatedAt) ?? parseTimestamp(note.createdAt),
+        createdTs: parseTimestamp(note.noteCreatedAtTs) ?? parseTimestamp(note.noteCreatedAt) ?? parseTimestamp(note.createdAt),
       }));
 
       const bucket = gitlabMrsByDeveloper.get(mr.authorId) ?? [];
       bucket.push({
         ...mr,
-        createdTs: parseTimestamp(mr.mrCreatedAt) ?? parseTimestamp(mr.createdAt),
-        mergedTs: parseTimestamp(mr.mrMergedAt),
+        createdTs: parseTimestamp(mr.mrCreatedAtTs) ?? parseTimestamp(mr.mrCreatedAt) ?? parseTimestamp(mr.createdAt),
+        mergedTs: parseTimestamp(mr.mrMergedAtTs) ?? parseTimestamp(mr.mrMergedAt),
         notes: indexedNotes,
       });
       gitlabMrsByDeveloper.set(mr.authorId, bucket);
@@ -609,7 +624,7 @@ export async function GET(request: NextRequest) {
       const noteBucket = reviewNotesByDeveloper.get(note.authorId) ?? [];
       noteBucket.push({
         ...note,
-        createdTs: parseTimestamp(note.noteCreatedAt) ?? parseTimestamp(note.createdAt),
+        createdTs: parseTimestamp(note.noteCreatedAtTs) ?? parseTimestamp(note.noteCreatedAt) ?? parseTimestamp(note.createdAt),
       });
       reviewNotesByDeveloper.set(note.authorId, noteBucket);
     }
@@ -637,27 +652,74 @@ export async function GET(request: NextRequest) {
     const previousMetricsMap = new Map(previousMetrics.map((metric) => [metric.developerId, metric]));
 
     const monthRanges = eachMonthOfInterval({ start: startOfMonth(from), end: startOfMonth(to) });
-    const trend = (
-      await Promise.all(
-        monthRanges.map(async (monthDate) => {
-          const metrics = await buildRangeMetrics({
-            developers,
-            jiraIssuesByDeveloper,
-            gitlabMrsByDeveloper,
-            reviewNotesByDeveloper,
-            rangeStart: startOfMonth(monthDate),
-            rangeEnd: endOfMonth(monthDate),
-          });
+    let trend: DashboardTrendPoint[];
 
+    if (developerIds.length === 0 && projectIds.length === 0) {
+      const summaryRows = await getDashboardMonthlySummary({
+        workspaceId,
+        from: startOfMonth(from),
+        to: startOfMonth(to),
+      }).catch(() => []);
+      const summaryByPeriod = new Map(summaryRows.map((row) => [format(row.periodStart, 'yyyy-MM'), row]));
+      const hasFullSummaryCoverage = monthRanges.every((monthDate) => summaryByPeriod.has(format(monthDate, 'yyyy-MM')));
+
+      if (hasFullSummaryCoverage) {
+        trend = monthRanges.map((monthDate) => {
+          const periodKey = format(monthDate, 'yyyy-MM');
+          const summary = summaryByPeriod.get(periodKey)!;
           return {
-            date: format(monthDate, 'yyyy-MM'),
-            composite: roundMetric(average(metrics.map((metric) => metric.composite))),
-            jira: roundMetric(average(metrics.map((metric) => metric.jira.total))),
-            gitlab: roundMetric(average(metrics.map((metric) => metric.gitlab.total))),
+            date: periodKey,
+            composite: roundMetric(summary.avgComposite),
+            jira: roundMetric(summary.avgJira),
+            gitlab: roundMetric(summary.avgGitlab),
           } satisfies DashboardTrendPoint;
-        }),
-      )
-    ).sort((a, b) => a.date.localeCompare(b.date));
+        });
+      } else {
+        trend = (
+          await Promise.all(
+            monthRanges.map(async (monthDate) => {
+              const metrics = await buildRangeMetrics({
+                developers,
+                jiraIssuesByDeveloper,
+                gitlabMrsByDeveloper,
+                reviewNotesByDeveloper,
+                rangeStart: startOfMonth(monthDate),
+                rangeEnd: endOfMonth(monthDate),
+              });
+
+              return {
+                date: format(monthDate, 'yyyy-MM'),
+                composite: roundMetric(average(metrics.map((metric) => metric.composite))),
+                jira: roundMetric(average(metrics.map((metric) => metric.jira.total))),
+                gitlab: roundMetric(average(metrics.map((metric) => metric.gitlab.total))),
+              } satisfies DashboardTrendPoint;
+            }),
+          )
+        ).sort((a, b) => a.date.localeCompare(b.date));
+      }
+    } else {
+      trend = (
+        await Promise.all(
+          monthRanges.map(async (monthDate) => {
+            const metrics = await buildRangeMetrics({
+              developers,
+              jiraIssuesByDeveloper,
+              gitlabMrsByDeveloper,
+              reviewNotesByDeveloper,
+              rangeStart: startOfMonth(monthDate),
+              rangeEnd: endOfMonth(monthDate),
+            });
+
+            return {
+              date: format(monthDate, 'yyyy-MM'),
+              composite: roundMetric(average(metrics.map((metric) => metric.composite))),
+              jira: roundMetric(average(metrics.map((metric) => metric.jira.total))),
+              gitlab: roundMetric(average(metrics.map((metric) => metric.gitlab.total))),
+            } satisfies DashboardTrendPoint;
+          }),
+        )
+      ).sort((a, b) => a.date.localeCompare(b.date));
+    }
 
     const sortedByComposite = [...currentMetrics].sort((a, b) => b.composite - a.composite);
     const topTier = sortedByComposite.slice(0, Math.max(1, Math.ceil(sortedByComposite.length * 0.25)));

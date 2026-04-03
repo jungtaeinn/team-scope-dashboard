@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { startAuthentication } from '@simplewebauthn/browser';
 import { Loader2, ShieldCheck } from 'lucide-react';
 import { ChangelogDialog } from '@/components/changelog/ChangelogDialog';
 import { ThemeToggle } from '@/components/_ui/theme-toggle';
@@ -12,6 +13,7 @@ import { authClient } from '@/lib/auth/client';
 interface LoginPageClientProps {
   redirectTo: string;
   initialEmail?: string;
+  isMagicLinkAvailable?: boolean;
 }
 
 function isPasskeyCancellation(error: unknown) {
@@ -31,7 +33,22 @@ function isPasskeyCancellation(error: unknown) {
   );
 }
 
-export function LoginPageClient({ redirectTo, initialEmail = '' }: LoginPageClientProps) {
+function getAuthErrorMessage(payload: unknown, fallback: string) {
+  if (payload && typeof payload === 'object') {
+    const maybeMessage = 'message' in payload ? payload.message : null;
+    if (typeof maybeMessage === 'string' && maybeMessage.trim()) {
+      return maybeMessage;
+    }
+  }
+
+  return fallback;
+}
+
+export function LoginPageClient({
+  redirectTo,
+  initialEmail = '',
+  isMagicLinkAvailable = false,
+}: LoginPageClientProps) {
   const router = useRouter();
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState('');
@@ -82,14 +99,36 @@ export function LoginPageClient({ redirectTo, initialEmail = '' }: LoginPageClie
     setIsSubmittingPasskey(true);
 
     try {
-      const result = await (authClient as never as {
-        signIn: {
-          passkey: () => Promise<{ error: { message?: string } | null }>;
-        };
-      }).signIn.passkey();
+      if (typeof window === 'undefined' || typeof window.PublicKeyCredential === 'undefined') {
+        setErrorMessage('이 브라우저에서는 Passkey 로그인을 사용할 수 없습니다.');
+        return;
+      }
 
-      if (result.error) {
-        setErrorMessage(result.error.message ?? 'Passkey 로그인에 실패했습니다.');
+      const optionsResponse = await fetch('/api/auth/passkey/generate-authenticate-options', {
+        method: 'GET',
+        credentials: 'same-origin',
+      });
+      const optionsJson = (await optionsResponse.json().catch(() => null)) as Record<string, unknown> | null;
+
+      if (!optionsResponse.ok || !optionsJson) {
+        setErrorMessage(getAuthErrorMessage(optionsJson, 'Passkey 로그인 준비에 실패했습니다.'));
+        return;
+      }
+
+      const authentication = await startAuthentication({
+        optionsJSON: optionsJson as unknown as Parameters<typeof startAuthentication>[0]['optionsJSON'],
+      });
+
+      const verifyResponse = await fetch('/api/auth/passkey/verify-authentication', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ response: authentication }),
+      });
+      const verifyJson = (await verifyResponse.json().catch(() => null)) as Record<string, unknown> | null;
+
+      if (!verifyResponse.ok) {
+        setErrorMessage(getAuthErrorMessage(verifyJson, 'Passkey 로그인에 실패했습니다.'));
         return;
       }
 
@@ -97,6 +136,7 @@ export function LoginPageClient({ redirectTo, initialEmail = '' }: LoginPageClie
       router.refresh();
     } catch (error) {
       if (isPasskeyCancellation(error)) {
+        setStatusMessage('Passkey 인증이 취소되었거나 이 기기에서 사용할 수 있는 Passkey가 없습니다.');
         return;
       }
       setErrorMessage(error instanceof Error ? error.message : 'Passkey 로그인 중 오류가 발생했습니다.');
@@ -165,8 +205,7 @@ export function LoginPageClient({ redirectTo, initialEmail = '' }: LoginPageClie
                   프로젝트별 진행 상황과 담당자 현황을 한눈에 보는 대시보드
                 </h1>
                 <p className="max-w-2xl text-sm leading-6 text-[var(--muted-foreground)] sm:text-base">
-                  TeamScope는 Jira, GitLab, 개발자 매핑, 일정 간트, 점수 흐름을 하나의 워크스페이스에서
-                  연결해 보여줍니다. 로그인 후에는 역할 기준으로 맞는 화면과 데이터를 바로 확인할 수 있습니다.
+                  Jira, GitLab, 담당자, 일정, 점수 흐름을 한곳에서 확인하는 프로젝트 운영 대시보드
                 </p>
               </div>
 
@@ -195,23 +234,23 @@ export function LoginPageClient({ redirectTo, initialEmail = '' }: LoginPageClie
               </div>
 
               <div className="overflow-hidden rounded-2xl border bg-[var(--card)] shadow-sm">
-                <div className="flex items-center justify-between border-b px-4 py-3">
-                  <div>
+                <div className="flex items-center justify-between gap-4 border-b px-4 py-3">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold">실행 화면 데모</p>
-                    <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                      대시보드, 개발자, 설정 화면이 짧게 반복됩니다.
+                    <p className="mt-1 truncate whitespace-nowrap text-[11px] text-[var(--muted-foreground)] sm:text-xs">
+                      대시보드, Gantt, 개발자 상세, 설정, Test 화면이 자연스럽게 반복됩니다.
                     </p>
                   </div>
-                  <div className="inline-flex items-center rounded-full border bg-[var(--muted)]/40 px-2.5 py-1 text-[11px] font-medium text-[var(--muted-foreground)]">
-                    Dashboard / Developer / Settings
+                  <div className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border bg-[var(--muted)]/40 px-2 py-1 text-[10px] font-medium text-[var(--muted-foreground)] sm:px-2.5 sm:text-[11px]">
+                    Dashboard / Gantt / Developer / Settings / Test
                   </div>
                 </div>
                 <div className="bg-[#0a0d14] p-3">
                   <Image
                     src="/login-demo/teamscope-demo.gif"
-                    alt="TeamScope 실행 화면 데모"
+                    alt="TeamScope 최신 실행 화면 데모"
                     width={1080}
-                    height={768}
+                    height={720}
                     unoptimized
                     priority
                     className="h-auto w-full rounded-xl border border-white/10"
@@ -245,6 +284,9 @@ export function LoginPageClient({ redirectTo, initialEmail = '' }: LoginPageClie
                     {isSubmittingPasskey ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                     Passkey 로그인
                   </button>
+                  <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+                    처음 이용 시 비밀번호 로그인 후 상단 `Passkey 관리`에서 등록할 수 있어요.
+                  </p>
 
                   <div className="flex items-center gap-3 py-1">
                     <div className="h-px flex-1 bg-[var(--border)]" />
@@ -292,16 +334,36 @@ export function LoginPageClient({ redirectTo, initialEmail = '' }: LoginPageClie
                     <div className="h-px flex-1 bg-[var(--border)]" />
                   </div>
 
-                  <form className="space-y-3" onSubmit={handleMagicLink}>
-                    <button
-                      type="submit"
-                      disabled={isSubmittingMagicLink || !email}
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium text-[var(--card-foreground)] transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {isSubmittingMagicLink ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                      Magic Link 보내기
-                    </button>
-                  </form>
+                  {isMagicLinkAvailable ? (
+                    <form className="space-y-3" onSubmit={handleMagicLink}>
+                      <button
+                        type="submit"
+                        disabled={isSubmittingMagicLink || !email}
+                        className="inline-flex w-full items-center justify-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-medium text-[var(--card-foreground)] transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isSubmittingMagicLink ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                        Magic Link 보내기
+                      </button>
+                      <p className="text-xs leading-5 text-[var(--muted-foreground)]">
+                        등록된 이메일로 1회용 로그인 링크를 발송합니다.
+                      </p>
+                    </form>
+                  ) : (
+                    <div className="rounded-xl border border-dashed bg-[var(--muted)]/20 p-3">
+                      <div className="flex items-center">
+                        <button
+                          type="button"
+                          disabled
+                          className="inline-flex w-full items-center justify-center rounded-lg border px-4 py-2.5 text-sm font-medium text-[var(--muted-foreground)] opacity-70"
+                        >
+                          Magic Link 보내기
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">
+                        Magic Link 로그인은 추후 지원 예정입니다.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {(statusMessage || errorMessage) && (

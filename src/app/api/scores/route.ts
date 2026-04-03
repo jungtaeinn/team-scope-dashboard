@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { endOfMonth, format, startOfMonth } from 'date-fns';
+import { endOfMonth, startOfMonth } from 'date-fns';
 import { requireApiContext } from '@/lib/auth/api';
 import { prisma } from '@/lib/db';
+import { refreshDashboardMonthlySummaryView } from '@/lib/db/dashboard-monthly-summary';
+import { formatDateOnly, periodToMonthStart } from '@/lib/db/normalized-date';
 import { calculateJiraScore, calculateGitlabScore, calculateCompositeScore } from '@/lib/scoring';
 import { DEFAULT_SCORING_WEIGHTS } from '@/common/constants';
 import type { JiraScoreBreakdown, GitlabScoreBreakdown } from '@/lib/scoring';
@@ -48,7 +50,7 @@ export async function GET(request: NextRequest) {
     const existingScores = await prisma.score.findMany({
       where: {
         workspaceId,
-        period,
+        periodStart: periodToMonthStart(period),
         developerId: { in: targetDeveloperIds },
       },
       include: { developer: true },
@@ -144,8 +146,6 @@ async function calculateScoresOnDemand(workspaceId: string, period: string, deve
   const targetDeveloperIds = developers.map((developer) => developer.id);
   const periodStart = startOfMonth(new Date(`${period}-01T00:00:00`));
   const periodEnd = endOfMonth(periodStart);
-  const periodStartStr = format(periodStart, 'yyyy-MM-dd');
-  const periodEndStr = format(periodEnd, 'yyyy-MM-dd');
 
   const [jiraIssues, gitlabMRs] = await prisma.$transaction([
     prisma.jiraIssue.findMany({
@@ -155,23 +155,23 @@ async function calculateScoresOnDemand(workspaceId: string, period: string, deve
         OR: [
           {
             AND: [
-              { ganttStartDate: { lte: periodEndStr } },
-              { ganttEndDate: { gte: periodStartStr } },
+              { ganttStartOn: { lte: periodEnd } },
+              { ganttEndOn: { gte: periodStart } },
             ],
           },
           {
             AND: [
-              { ganttStartDate: { lte: periodEndStr } },
-              { dueDate: { gte: periodStartStr } },
+              { ganttStartOn: { lte: periodEnd } },
+              { dueOn: { gte: periodStart } },
             ],
           },
-          { ganttEndDate: { gte: periodStartStr, lte: periodEndStr } },
-          { dueDate: { gte: periodStartStr, lte: periodEndStr } },
+          { ganttEndOn: { gte: periodStart, lte: periodEnd } },
+          { dueOn: { gte: periodStart, lte: periodEnd } },
           {
             AND: [
-              { ganttStartDate: null },
-              { ganttEndDate: null },
-              { dueDate: null },
+              { ganttStartOn: null },
+              { ganttEndOn: null },
+              { dueOn: null },
               { updatedAt: { gte: periodStart, lte: periodEnd } },
             ],
           },
@@ -187,15 +187,20 @@ async function calculateScoresOnDemand(workspaceId: string, period: string, deve
         priority: true,
         storyPoints: true,
         ganttStartDate: true,
+        ganttStartOn: true,
         ganttEndDate: true,
+        ganttEndOn: true,
         baselineStart: true,
+        baselineStartOn: true,
         baselineEnd: true,
+        baselineEndOn: true,
         ganttProgress: true,
         plannedEffort: true,
         actualEffort: true,
         remainingEffort: true,
         timeSpent: true,
         dueDate: true,
+        dueOn: true,
       },
     }),
     prisma.gitlabMR.findMany({
@@ -203,8 +208,8 @@ async function calculateScoresOnDemand(workspaceId: string, period: string, deve
         workspaceId,
         authorId: { in: targetDeveloperIds },
         OR: [
-          { mrCreatedAt: { gte: periodStartStr, lte: periodEndStr } },
-          { mrMergedAt: { gte: periodStartStr, lte: periodEndStr } },
+          { mrCreatedAtTs: { gte: periodStart, lte: periodEnd } },
+          { mrMergedAtTs: { gte: periodStart, lte: periodEnd } },
         ],
       },
       select: {
@@ -220,10 +225,12 @@ async function calculateScoresOnDemand(workspaceId: string, period: string, deve
         sourceBranch: true,
         targetBranch: true,
         mrCreatedAt: true,
+        mrCreatedAtTs: true,
         mrMergedAt: true,
+        mrMergedAtTs: true,
         notes: {
           where: {
-            noteCreatedAt: { gte: periodStartStr, lte: periodEndStr },
+            noteCreatedAtTs: { gte: periodStart, lte: periodEnd },
           },
           select: {
             mrId: true,
@@ -231,6 +238,7 @@ async function calculateScoresOnDemand(workspaceId: string, period: string, deve
             isResolvable: true,
             isResolved: true,
             noteCreatedAt: true,
+            noteCreatedAtTs: true,
           },
         },
       },
@@ -278,17 +286,17 @@ async function calculateScoresOnDemand(workspaceId: string, period: string, deve
       sprintName: null,
       sprintState: null,
       storyPoints: issue.storyPoints,
-      ganttStartDate: issue.ganttStartDate,
-      ganttEndDate: issue.ganttEndDate,
-      baselineStart: issue.baselineStart,
-      baselineEnd: issue.baselineEnd,
+      ganttStartDate: issue.ganttStartDate ?? formatDateOnly(issue.ganttStartOn),
+      ganttEndDate: issue.ganttEndDate ?? formatDateOnly(issue.ganttEndOn),
+      baselineStart: issue.baselineStart ?? formatDateOnly(issue.baselineStartOn),
+      baselineEnd: issue.baselineEnd ?? formatDateOnly(issue.baselineEndOn),
       ganttProgress: issue.ganttProgress,
       ganttUnit: null,
       plannedEffort: issue.plannedEffort,
       actualEffort: issue.actualEffort,
       remainingEffort: issue.remainingEffort,
       timeSpent: issue.timeSpent,
-      dueDate: issue.dueDate,
+      dueDate: issue.dueDate ?? formatDateOnly(issue.dueOn),
       created: '',
       updated: '',
       resolutionDate: null,
@@ -302,8 +310,8 @@ async function calculateScoresOnDemand(workspaceId: string, period: string, deve
       authorName: '',
       sourceBranch: mr.sourceBranch ?? '',
       targetBranch: mr.targetBranch ?? '',
-      createdAt: mr.mrCreatedAt,
-      mergedAt: mr.mrMergedAt,
+      createdAt: mr.mrCreatedAtTs?.toISOString() ?? mr.mrCreatedAt,
+      mergedAt: mr.mrMergedAtTs?.toISOString() ?? mr.mrMergedAt,
       notesCount: mr.notesCount,
       changesCount: mr.changesCount ?? 0,
       additions: mr.additions ?? 0,
@@ -316,7 +324,7 @@ async function calculateScoresOnDemand(workspaceId: string, period: string, deve
         body: '',
         authorUsername: '',
         authorName: '',
-        createdAt: note.noteCreatedAt,
+        createdAt: note.noteCreatedAtTs?.toISOString() ?? note.noteCreatedAt,
         isReviewComment: !note.isSystem,
         isResolvable: note.isResolvable,
         isResolved: note.isResolved,
@@ -366,11 +374,13 @@ async function calculateScoresOnDemand(workspaceId: string, period: string, deve
           compositeScore: payload.compositeScore,
           breakdown: payload.breakdown,
           calculatedAt: new Date(),
+          periodStart,
         },
         create: {
           workspaceId,
           developerId: payload.developerId,
           period,
+          periodStart,
           jiraScore: payload.jiraScore,
           gitlabScore: payload.gitlabScore,
           compositeScore: payload.compositeScore,
@@ -380,11 +390,13 @@ async function calculateScoresOnDemand(workspaceId: string, period: string, deve
     ),
   );
 
+  await refreshDashboardMonthlySummaryView();
+
   /* eslint-enable @typescript-eslint/no-explicit-any */
   return prisma.score.findMany({
     where: {
       workspaceId,
-      period,
+      periodStart,
       developerId: { in: targetDeveloperIds },
     },
     include: { developer: true },

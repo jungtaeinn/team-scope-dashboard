@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireApiContext } from '@/lib/auth/api';
 import { prisma } from '@/lib/db';
+import { formatDateOnly } from '@/lib/db/normalized-date';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -49,7 +50,9 @@ export async function GET(request: Request, { params }: RouteParams) {
       where: { workspaceId: authResult.context.workspace.id, assigneeId: id },
       select: {
         ganttStartDate: true,
+        ganttStartOn: true,
         dueDate: true,
+        dueOn: true,
         createdAt: true,
         status: true,
         plannedEffort: true,
@@ -62,8 +65,8 @@ export async function GET(request: Request, { params }: RouteParams) {
     const monthMap = new Map<string, { planned: number; actual: number }>();
     for (const issue of issues) {
       const monthKey =
-        toMonthKey(issue.ganttStartDate) ||
-        toMonthKey(issue.dueDate) ||
+        toMonthKey(issue.ganttStartDate ?? formatDateOnly(issue.ganttStartOn)) ||
+        toMonthKey(issue.dueDate ?? formatDateOnly(issue.dueOn)) ||
         issue.createdAt.toISOString().slice(0, 7);
 
       const prev = monthMap.get(monthKey) ?? { planned: 0, actual: 0 };

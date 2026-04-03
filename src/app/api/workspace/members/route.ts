@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireApiContext } from '@/lib/auth/api';
@@ -24,6 +24,42 @@ function getInvitationStatus(status: string, expiresAt: Date) {
   if (status !== 'pending') return status;
   if (expiresAt.getTime() < Date.now()) return 'expired';
   return 'pending';
+}
+
+function getInviteBaseUrl(request: Request) {
+  const configuredBaseUrl = process.env.BETTER_AUTH_URL?.trim() || process.env.NEXT_PUBLIC_APP_URL?.trim();
+
+  try {
+    return new URL(configuredBaseUrl || request.url).origin;
+  } catch {
+    return new URL(request.url).origin;
+  }
+}
+
+async function createInvitationLoginUrl(request: Request, email: string, organizationId: string, expiresAt: Date) {
+  const token = randomBytes(24).toString('base64url');
+  const baseUrl = getInviteBaseUrl(request);
+  const suggestedName = email.split('@')[0]?.trim() || '새 사용자';
+
+  await prisma.verification.create({
+    data: {
+      identifier: token,
+      value: JSON.stringify({
+        email,
+        name: suggestedName,
+        attempt: 0,
+        source: 'workspace-invite',
+        organizationId,
+      }),
+      expiresAt,
+    },
+  });
+
+  const loginUrl = new URL('/api/auth/magic-link/verify', baseUrl);
+  loginUrl.searchParams.set('token', token);
+  loginUrl.searchParams.set('callbackURL', '/');
+
+  return loginUrl.toString();
 }
 
 export async function GET(request: Request) {
@@ -171,9 +207,7 @@ export async function POST(request: Request) {
         },
       });
 
-  const loginUrl = new URL(`/login?email=${encodeURIComponent(email)}`, request.url);
-  loginUrl.pathname = '/login';
-  loginUrl.search = `email=${encodeURIComponent(email)}`;
+  const loginUrl = await createInvitationLoginUrl(request, email, context.workspace.id, expiresAt);
 
   return json(
     {

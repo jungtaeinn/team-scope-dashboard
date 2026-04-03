@@ -12,7 +12,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
 
   return (
     <>
-      <Sidebar navigationItems={navigationItems} version={APP_VERSION} />
+      <Sidebar navigationItems={navigationItems} version={APP_VERSION} role={context.membership.role} />
       <main className="min-h-screen pl-0 lg:pl-[var(--sidebar-width)]">
         <AppHeader
           userName={context.user.name}

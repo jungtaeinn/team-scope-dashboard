@@ -5,6 +5,8 @@ import { prismaAdapter } from '@better-auth/prisma-adapter';
 import { passkey } from '@better-auth/passkey';
 import { nextCookies } from 'better-auth/next-js';
 import { prisma } from '@/lib/db';
+import { hashPassword, verifyPassword } from '@/lib/auth/password';
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '@/lib/auth/password-policy';
 
 function getBaseUrl() {
   return process.env.BETTER_AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
@@ -59,8 +61,12 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,
-    minPasswordLength: 4,
-    maxPasswordLength: 128,
+    minPasswordLength: PASSWORD_MIN_LENGTH,
+    maxPasswordLength: PASSWORD_MAX_LENGTH,
+    password: {
+      hash: hashPassword,
+      verify: verifyPassword,
+    },
   },
   trustedOrigins: Array.from(
     new Set([

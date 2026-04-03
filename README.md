@@ -1,745 +1,1171 @@
-# TeamScope (team-scope-dashboard)
+# TeamScope
 
-현재 버전: `v0.5.0`
+현재 버전: `v0.7.0`
 
-> 개발 팀 성과를 정량화하여 시각적으로 관리하는 대시보드
+TeamScope는 Jira, GitLab, 담당자, 일정, 점수 흐름을 하나의 워크스페이스에서 연결해 보여주는 프로젝트 운영 대시보드입니다.  
+운영자는 프로젝트 연결, 멤버 권한, 데이터 동기화, 점수 기준을 한곳에서 관리할 수 있고, 사용자는 로그인 후 자신의 역할에 맞는 화면에서 바로 현황을 확인할 수 있습니다.
 
-Jira와 GitLab 데이터를 연동하여 개발자별 업무 수행 능력과 코드 품질을 수치화하고, 워크스페이스/권한 기반 운영 환경에서 인터랙티브 대시보드로 시각화합니다.
-
-## 이 도구로 얻는 관리 효과
-
-이 프로젝트는 단순 리포트가 아니라, 팀 운영 의사결정을 빠르게 만드는 실행형 운영 대시보드입니다.
-
-| 기능 | 어떻게 활용하는가 | 관리상 이점 |
-|------|------------------|------------|
-| Jira + GitLab 통합 동기화 | 티켓 진행, 일정, 공수, MR, 리뷰, CI 상태를 한 화면에서 조회 | 도구별 분산 확인 시간을 줄이고, 주간/월간 리포트 준비 시간을 단축 |
-| 개발자별 정량 스코어링 | Jira 수행력 + GitLab 품질 점수를 개인/팀 단위로 비교 | 감에 의존하지 않고 근거 기반으로 코칭, 회고, 목표 수립 가능 |
-| 기간/프로젝트/개발자 필터 | 월·분기·연도, 프로젝트, 인원별로 즉시 세분화 분석 | 특정 시점 이슈와 성과 변화를 빠르게 원인 분석 |
-| Gantt + 공수 현황 시각화 | 일정 축에서 작업 분포와 개인별 공수율을 함께 확인 | 과부하/유휴 인력을 조기에 식별해 재배치 및 일정 리스크 완화 |
-| 개발자 랭킹/상세 Drill-down | 팀 전체 랭킹에서 개인 상세(티켓, MR, 지표)로 즉시 진입 | 리뷰 대상자 선별, 1:1 미팅 포인트 정리, 성장 추적이 쉬워짐 |
-| 엑셀 내보내기 | 팀 요약/개인 상세 데이터를 보고서 형태로 다운로드 | 리더/경영진 공유용 보고서 자동화 및 커뮤니케이션 품질 향상 |
-| 가중치 커스터마이징 | Jira/GitLab 및 세부 항목 배점을 조직 기준에 맞게 조정 | 팀 문화·목표(속도/품질/협업)에 맞춘 성과 평가 체계 운영 |
-
-즉, 이 대시보드를 사용하면 `누가 바쁜지`뿐 아니라 `왜 바쁜지`, `품질은 어떤지`, `어디를 개선해야 하는지`를 같은 맥락에서 관리할 수 있습니다.
-
-## 화면 미리보기 (Dark Mode)
-
-아래 이미지는 로컬 실행(`http://localhost:3000`) 기준으로 캡처한 실제 화면입니다.
-
-### 1) 대시보드 전체 화면
-
-![Dashboard Overview](./docs/screenshots/dark-dashboard-overview.png)
-
-- 날짜/개발자/프로젝트 필터를 상단에서 조합해 팀 상태를 즉시 조회할 수 있습니다.
-- KPI 카드와 위젯(추세, 레이더, 히트맵 등)을 함께 보면서 팀 전반 상태를 빠르게 파악할 수 있습니다.
-
-### 2) 일정 Gantt + 공수 현황
-
-![Gantt and Workload](./docs/screenshots/dark-gantt-workload.png)
-
-- 일정 Gantt에서 사람별 티켓 배치를 보고, 하단 공수 현황에서 과부하/여유를 동시에 확인할 수 있습니다.
-- 공수 정렬 토글을 활용하면 업무량 편차가 큰 인원을 빠르게 선별할 수 있습니다.
-
-### 3) 설정 - 멤버 매핑 및 동기화
-
-![Settings Member Mapping](./docs/screenshots/dark-settings-member-mapping.png)
-
-- Jira/GitLab 사용자 매핑, 그룹 지정, 활성 상태를 한 번에 관리할 수 있습니다.
-- `저장 + 동기화`로 설정 변경을 데이터 반영까지 바로 이어서 운영 누락을 줄일 수 있습니다.
-
-### 4) 개발자 순위 화면
-
-![Developer Ranking](./docs/screenshots/dark-developer-ranking.png)
-
-- 종합점수/Jira/GitLab/공수활용률 기준으로 개발자 현황을 비교할 수 있습니다.
-- 회고, 1:1, 리뷰 우선순위 선정 시 근거 데이터를 빠르게 공유할 수 있습니다.
-
-### 5) 개발자 상세 화면
-
-![Developer Detail](./docs/screenshots/dark-developer-detail.png)
-
-- 개인별 Jira/GitLab 세부 점수와 항목별 편차를 확인해 개선 포인트를 구체화할 수 있습니다.
-- 개인 일정 Gantt와 공수 정보를 함께 보며 일정 리스크와 실행 부담을 사전에 점검할 수 있습니다.
+이번 릴리스(`v0.7.0`)에서는 `Flow Lab(Test Harness)`로 운영 경로를 단계별 검증할 수 있게 했고, 날짜 정규화 컬럼, 인덱스, materialized view 기반 최적화로 분석 조회 성능도 함께 끌어올렸습니다.
 
 ---
 
-## 목차
+# 1부. 사용자 가이드
 
-- [이 도구로 얻는 관리 효과](#이-도구로-얻는-관리-효과)
-- [화면 미리보기 (Dark Mode)](#화면-미리보기-dark-mode)
-- [이번 릴리즈 요약 (v0.5.0)](#이번-릴리즈-요약-v050)
-- [주요 기능](#주요-기능)
-- [기술 스택](#기술-스택)
-- [빠른 시작](#빠른-시작)
-- [로그인 및 권한 구조](#로그인-및-권한-구조)
-- [공개 업로드 체크리스트](#공개-업로드-체크리스트)
-- [환경 변수 설정](#환경-변수-설정)
-- [프로젝트 구조](#프로젝트-구조)
-- [스코어링 모델](#스코어링-모델)
-- [사용 가이드](#사용-가이드)
-- [API 엔드포인트](#api-엔드포인트)
-- [커스터마이징](#커스터마이징)
-- [트러블슈팅](#트러블슈팅)
-- [FAQ](#faq)
+## 1. TeamScope가 하는 일
 
----
+TeamScope는 아래 질문에 답하기 위해 만들어졌습니다.
 
-## 이번 릴리즈 요약 (v0.5.0)
+- 지금 어떤 프로젝트가 지연 위험이 있는가
+- 누구에게 일이 몰려 있는가
+- Jira 일정과 GitLab 실행 품질이 함께 좋아지고 있는가
+- 팀과 개인의 흐름을 같은 기준으로 볼 수 있는가
 
-- 공개 페이지와 로그인 보호 영역을 라우트 그룹으로 재구성해 `/login`, `/changelog`, `/guide`, 대시보드/설정 동선이 더 분명해졌습니다.
-- Better Auth 세션 기준으로 기본 워크스페이스 자동 생성, 초대 자동 수락, 활성 워크스페이스 유지 로직을 추가해 계정 진입과 권한 운영이 안정화됐습니다.
-- GitLab 그룹 URL과 그룹 액세스 토큰을 지원하고, 프로젝트 연결 테스트, 멤버 불러오기, 동기화가 하위 프로젝트까지 이어지도록 확장했습니다.
-- 개발자 순위, 개발자 상세, 대시보드 인사이트가 같은 분석 소스와 점수 기준을 사용하도록 통일해 화면별 숫자 차이를 줄였습니다.
-- 가이드 페이지, 로그인 데모, 앱 내 changelog 모달, `dev-up.sh`/`dev-up.ps1`까지 포함해 설치부터 첫 사용까지의 온보딩 경험을 다듬었습니다.
+한마디로 말하면, `일정`, `담당자`, `리뷰`, `품질`, `공수`, `점수`를 따로 보지 않고 한 화면에서 같이 보는 도구입니다.
 
----
+## 2. 누가 쓰면 좋은가
 
-## 주요 기능
+- 팀 리더
+- 프로젝트 매니저
+- 운영 담당자
+- 개발 매니저
+- 데이터 기반으로 팀 상태를 보고 싶은 실무자
 
-### 인증 및 워크스페이스 운영
-- **Better Auth 기반 로그인**: 이메일/비밀번호, magic link, passkey 진입 흐름
-- **공개/보호 라우트 분리**: `/login`, `/changelog`는 공개 페이지로, 대시보드/설정은 로그인 보호 영역으로 운영
-- **기본 워크스페이스 bootstrap**: 첫 로그인 시 기본 워크스페이스를 자동 생성하고 활성 조직을 고정
-- **워크스페이스별 권한 분리**: Owner / Maintainer / Developer / Reporter / Guest
-- **초대 및 계정 관리**: 초대 자동 수락, 워크스페이스 역할 변경, Owner 전용 로그인 계정 직접 생성
-- **버전/릴리즈 가시성**: 앱 내 버전 표기, What’s new 모달, changelog 페이지
+개발자가 아니어도 사용할 수 있도록, 로컬 실행은 최대한 `한 줄 명령`으로 맞춰두었습니다.
 
-### 가이드 및 운영 지원
-- **4단계 시작 가이드**: 프로젝트 연결, 멤버 매핑, 동기화, 대시보드 확인을 순서대로 안내
-- **로그인 데모 프리뷰**: 실제 앱 화면 GIF와 포스터로 첫 화면에서 제품 흐름을 빠르게 이해
-- **개발 환경 부트스트랩 스크립트**: macOS/Linux `dev-up.sh`, Windows `dev-up.ps1`로 로컬 실행 자동화
-- **상태 피드백 강화**: 상단 로딩바, changelog 자동 오픈, 주요 액션 결과 메시지로 운영 상황을 더 명확히 표시
+## 3. 처음 쓰기 전에 꼭 알아둘 점
 
-### 멤버 매핑 및 프로젝트 운영
-- **프로젝트 기준 멤버 불러오기**: Jira/GitLab에서 실제 등록 멤버를 조회해 선택 저장
-- **GitLab 그룹 연동 지원**: 그룹 URL과 그룹 액세스 토큰 기준으로 하위 프로젝트 멤버/MR 수집 지원
-- **자동 매핑 및 중복 병합**: Jira/GitLab 식별자, 이메일 local-part, 정규화 이름 기준 자동 연결
-- **그룹 자동 분류**: `AP` 계열 식별자와 일반 협력사 계정을 기본 그룹으로 자동 분류
-- **프로젝트별 필터 정합성**: 선택한 프로젝트에 맞는 개발자와 데이터만 보이도록 스코프 관리
-- **저장 후 연결 재검증**: 프로젝트 관리 카드에서 저장된 연결을 즉시 다시 테스트 가능
+- 이 프로젝트는 `Next.js + PostgreSQL + Better Auth` 기반입니다.
+- 처음 실행할 때는 `Node.js`와 `Docker Desktop`이 필요합니다.
+- 대부분의 경우 `.env.local`을 직접 손대지 않아도 실행은 가능합니다.
+- Jira/GitLab 연결은 나중에 앱의 `설정` 화면에서 입력해도 됩니다.
 
-### 대시보드
-- **Datadog 스타일 위젯 그리드**: 드래그앤드롭으로 위젯 이동, 리사이즈, 복제, 삭제
-- **인터랙티브 차트**: 드래그 줌, 클릭 드릴다운, 브러시 범위 선택, 기준 모달
-- **실시간 스코어링**: Jira 업무 수행 + GitLab 코드 품질 = 종합 점수
-- **운영형 KPI**: 현재값뿐 아니라 직전 동일 기간 대비 변화율과 상태 배지를 함께 표시
+## 4. 가장 쉬운 실행 방법
 
-### 데이터 연동
-- **Jira REST API**: 이슈, WBSGantt 일정, 워크로그, 공수 데이터 수집
-- **GitLab REST API**: MR, 코드리뷰 코멘트, 파이프라인 데이터 수집
-- **다중 프로젝트**: Jira/GitLab 프로젝트를 자유롭게 추가/수정/삭제
-- **정확한 외부 링크 연결**: Jira 이슈와 GitLab MR을 프로젝트별 실제 URL 기준으로 새 창 열기
+### macOS
 
-### 분석 및 내보내기
-- **기간별 필터**: 월별, 분기별, 연도별 또는 커스텀 날짜 범위
-- **개발자별/그룹별 필터**: 개별 또는 그룹 단위 성과 비교
-- **엑셀 내보내기**: 팀 요약, 개발자 상세, Jira/GitLab 시트별 Excel 다운로드
-- **검색 필터**: 텍스트 검색 (향후 Azure AI 프롬프트 검색 확장 예정)
+준비물:
 
----
+- Node.js 20 이상
+- Docker Desktop 또는 Colima
 
-## 기술 스택
-
-| 카테고리 | 기술 | 버전      |
-|---------|------|---------|
-| 프레임워크 | Next.js (App Router) | 16.1.7  |
-| UI | React | 19.2.x  |
-| 언어 | TypeScript | 5.9.3   |
-| 스타일 | Tailwind CSS | 4.2.1   |
-| 인증 | Better Auth | 1.5.6   |
-| ORM | Prisma + PostgreSQL | 7.5.0   |
-| 차트 | Recharts | 3.8.0   |
-| 위젯 그리드 | react-grid-layout | 2.2.2   |
-| 상태 관리 | TanStack React Query | 5.90.21 |
-| URL 상태 | nuqs | 2.8.9   |
-| 유효성 검증 | Zod | 4.3.6   |
-| 엑셀 | SheetJS (xlsx) | 0.18.5  |
-
----
-
-## 빠른 시작
-
-현재 로컬 실행 기준은 `Next.js + PostgreSQL + Better Auth` 입니다.  
-즉, 프런트엔드만 띄우는 것이 아니라 **Postgres가 먼저 살아 있어야** 로그인/권한/대시보드가 정상 동작합니다.
-
-### 먼저 준비되어 있어야 하는 것
-
-운영체제와 관계없이 아래 2가지는 먼저 필요합니다.
-
-| 항목 | 권장 버전 | 설치 이유 |
-|------|-----------|-----------|
-| Node.js | 20 이상 | Next.js / Prisma / pnpm 실행 |
-| Docker | 최신 | 로컬 PostgreSQL 컨테이너 실행 |
-
-추가 참고:
-
-- `pnpm`이 없어도 괜찮습니다. 이 프로젝트의 실행 스크립트는 `corepack`으로 `pnpm`을 자동 활성화하려고 시도합니다.
-- macOS에서 `Colima`를 쓰는 경우 `dev-up.sh`가 자동으로 `colima start`를 시도합니다.
-- Windows는 `Colima`가 아니라 `Docker Desktop` 기준으로 안내합니다.
-
-추천 설치 링크:
-
-- Node.js: [https://nodejs.org/](https://nodejs.org/)
-- Docker Desktop: [https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/)
-- Colima(macOS 선택): [https://github.com/abiosoft/colima](https://github.com/abiosoft/colima)
-
-### 가장 쉬운 실행 방법
-
-아래 한 줄이면 로컬 실행 준비와 개발 서버 시작이 한 번에 끝납니다.
-
-#### macOS / Linux
+실행:
 
 ```bash
-./scripts/dev-up.sh
+pnpm run dev:mac
 ```
 
-또는:
+### Windows
 
-```bash
-pnpm run dev:up
-```
+준비물:
 
-#### Windows (PowerShell)
+- Node.js 20 이상
+- Docker Desktop
+
+실행:
 
 ```powershell
-.\scripts\dev-up.ps1
+pnpm run dev:windows
 ```
 
-또는:
+### 이 명령이 자동으로 해주는 일
+
+- PostgreSQL 컨테이너 준비
+- `.env.local` 자동 생성
+- 패키지 설치
+- Prisma 스키마 반영
+- 기본 데이터 시드
+- 개발 서버 실행
+
+즉, 처음 쓰는 사람은 보통 아래만 기억하면 충분합니다.
+
+```bash
+pnpm run dev:mac
+```
+
+또는
 
 ```powershell
-pnpm run dev:up:windows
+pnpm run dev:windows
 ```
 
-이 스크립트가 자동으로 수행하는 일:
+## 5. 첫 로그인
 
-1. 필요한 명령어(`node`, `docker`, `pnpm`) 확인
-2. `pnpm`이 없으면 `corepack`으로 자동 활성화 시도
-3. macOS에서는 필요 시 `colima start` 시도
-4. `teamscope-postgres` 컨테이너 생성 또는 재시작
-5. `.env.local` 없으면 `.env.local.example` 복사
-6. `node_modules` 없으면 `pnpm install`
-7. `pnpm exec prisma db push`
-8. `node --experimental-strip-types prisma/seed.ts`
-9. `pnpm dev`
+기본 Owner 계정은 아래 값으로 시드됩니다.
 
-### 만약 실행 전에 아무것도 설치되어 있지 않다면
+- 이메일: `owner@example.com`
+- 비밀번호: `ChangeMe123!`
 
-#### macOS
+이 값은 `.env.local`의 아래 항목으로 바꿀 수 있습니다.
 
-1. Node.js 설치
-2. Docker Desktop 설치 또는 `brew install colima docker`
-3. 새 터미널 열기
-4. 아래 실행
+- `BOOTSTRAP_OWNER_EMAIL`
+- `BOOTSTRAP_OWNER_NAME`
+- `BOOTSTRAP_OWNER_PASSWORD`
 
-```bash
-./scripts/dev-up.sh
-```
+## 6. 처음 사용할 때 추천 순서
 
-#### Windows
+### 1단계. 로그인
 
-1. Node.js 설치
-2. Docker Desktop 설치 후 실행
-3. PowerShell 실행
-4. 저장소 루트에서 아래 실행
+기본 Owner 계정으로 로그인합니다.
 
-```powershell
-.\scripts\dev-up.ps1
-```
+### 2단계. 프로젝트 연결
 
-Windows에서는 `Colima`가 필요 없습니다.
+`설정 > 프로젝트 관리`에서 Jira와 GitLab 연결 정보를 등록합니다.
 
-### 실행 스크립트가 알려주는 것
+보통 아래 값이 필요합니다.
 
-만약 아래 도구가 없으면 스크립트가 즉시 중단하고 설치 안내를 출력합니다.
+- Jira Base URL
+- Jira PAT
+- Jira Project Key
+- GitLab Base URL
+- GitLab PAT
+- GitLab Project ID 또는 Group Path
 
-- `node`
-- `docker`
-- `pnpm` 또는 `corepack`
+### 3단계. 멤버 매핑
 
-즉, "왜 안 되는지"를 직접 추측하지 않아도 되도록 설계되어 있습니다.
+`설정 > 멤버 매핑`에서 프로젝트 멤버를 불러오고, 실제 사람 기준으로 연결합니다.
 
-### 1단계: 프로젝트 클론 및 의존성 설치
+### 4단계. 데이터 동기화
 
-```bash
-git clone <repository-url> team-scope-dashboard
-cd team-scope-dashboard
-pnpm install
-```
+우측 상단의 `데이터 동기화`를 눌러 Jira/GitLab 데이터를 가져옵니다.
 
-### 2단계: Colima/Docker 실행
+### 5단계. 대시보드 확인
 
-이 프로젝트는 로컬에서 Docker 기반 Postgres를 사용하는 흐름을 기본으로 안내합니다.
+동기화가 끝나면 대시보드와 개발자 화면에서 점수와 추세를 볼 수 있습니다.
 
-#### macOS
+## 7. 워크스페이스 접근 관리
 
-`Colima`를 쓰는 경우:
+`설정 > 멤버 매핑` 안에서 워크스페이스 접근을 관리할 수 있습니다.
 
-```bash
-# Colima가 꺼져 있다면 먼저 실행
-colima start
-```
+현재 지원하는 방식은 두 가지입니다.
 
-`Docker Desktop`을 쓰는 경우에는 Colima 없이 Docker Desktop만 켜져 있어도 됩니다.
+### 초대 링크 생성
 
-#### Windows
+- 이메일과 역할을 입력하고 `초대 추가`를 누릅니다.
+- 시스템이 1회용 로그인 링크를 생성합니다.
+- 상대방이 그 링크를 열면 계정이 자동 생성되고 워크스페이스에 참여합니다.
+- 초대 기반으로 생성된 계정의 초기 비밀번호는 `qwer1234`입니다.
 
-- Docker Desktop만 실행되어 있으면 됩니다.
-- Colima는 사용하지 않습니다.
+권장 운영 방식:
 
-### 3단계: PostgreSQL 컨테이너 실행
+- 초대 링크로 첫 로그인
+- 로그인 후 비밀번호 변경
+- 필요하면 Passkey 등록
 
-처음 실행하는 경우:
+### Owner가 직접 계정 생성
 
-```bash
-docker run -d \
-  --name teamscope-postgres \
-  -e POSTGRES_USER=teamscope \
-  -e POSTGRES_PASSWORD=teamscope \
-  -e POSTGRES_DB=teamscope \
-  -p 54329:5432 \
-  -v teamscope-postgres-data:/var/lib/postgresql/data \
-  postgres:16-alpine
-```
+Owner는 로그인 가능한 계정을 직접 만들 수 있습니다.
 
-이미 한 번 생성해둔 경우:
+- 이름
+- 이메일
+- 비밀번호
+- 역할
 
-```bash
-docker start teamscope-postgres
-```
+을 입력하면 바로 사용할 수 있는 계정이 생성됩니다.
 
-정상 실행 확인:
+## 8. 역할과 권한
 
-```bash
-docker ps
-lsof -iTCP:54329 -sTCP:LISTEN
-```
+TeamScope는 워크스페이스 단위 역할을 사용합니다.
 
-### 4단계: 환경 변수 설정
+| 역할 | 할 수 있는 일 |
+|---|---|
+| Owner | 전체 설정, 계정 생성, 권한 부여/변경, 멤버 제거, Test Harness 사용 |
+| Maintainer | 대부분의 운영 설정, 일반 역할 초대/수정 |
+| Developer | 대시보드와 개발자 화면 사용 |
+| Reporter | 읽기 중심 조회 |
+| Guest | 제한적 조회 |
 
-```bash
-cp .env.local.example .env.local
+Owner 화면에서는 계정을 `권한 그룹별`로 묶어서 볼 수 있고, 같은 화면에서 역할 변경도 할 수 있습니다.
 
-# 로컬 개발용 기본값 예시
-# Postgres 포트는 54329 기준
-```
+## 9. Passkey와 비밀번호는 어디서 관리하나
 
-예시:
+보안 관련 기능은 상단 헤더가 아니라 `좌측 사이드바 하단`에 배치되어 있습니다.
 
-```bash
-# Jira 설정
-JIRA_BASE_URL=https://your-jira-instance.com
-JIRA_PAT=your_jira_personal_access_token
-JIRA_PROJECT_KEY=YOUR_PROJECT
+- `Passkey 관리`
+- `비밀번호 변경`
 
-# GitLab 설정
-GITLAB_BASE_URL=https://your-gitlab-instance.com
-GITLAB_PAT=your_gitlab_project_or_group_access_token
-GITLAB_PROJECT_ID=123
+### Passkey
 
-# PostgreSQL
-DATABASE_URL=postgresql://teamscope:teamscope@127.0.0.1:54329/teamscope?schema=public
+Passkey는 비밀번호 대신 기기 생체 인증이나 화면 잠금으로 로그인하는 방식입니다.
 
-# 앱 URL
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+처음 사용하는 경우:
 
-# 초기 Owner 계정
-BOOTSTRAP_OWNER_EMAIL=owner@example.com
-BOOTSTRAP_OWNER_NAME=TeamScope Owner
-BOOTSTRAP_OWNER_PASSWORD=ChangeMe123!
-```
+1. 먼저 이메일/비밀번호로 로그인
+2. 좌측 하단 `Passkey 관리` 열기
+3. 현재 기기에 Passkey 등록
 
-### 5단계: 스키마 반영 및 시드 실행
+### 비밀번호 변경
 
-```bash
-# Prisma 스키마 반영
-pnpm exec prisma db push
+로그인 후 언제든지 `비밀번호 변경`에서 새 비밀번호로 바꿀 수 있습니다.
 
-# 기본 워크스페이스 / Owner / 기본 가중치 / 기본 레이아웃 시드
-node --experimental-strip-types prisma/seed.ts
-```
+## 10. 현재 로그인 정책
 
-### 6단계: 개발 서버 실행
+- 공개 로그인 화면의 일반 `Magic Link 보내기`는 아직 `추후 지원 예정`입니다.
+- 대신 워크스페이스 초대 링크는 이미 동작합니다.
+- 따라서 현재 운영 방식은 아래 두 가지가 중심입니다.
 
-```bash
-pnpm dev
-```
+1. 이메일/비밀번호 로그인
+2. 초대 링크 기반 첫 로그인 후 계정 생성
 
-브라우저에서 [http://localhost:3000/login](http://localhost:3000/login) 을 열면 로그인 화면이 표시됩니다.
+## 11. 자주 쓰는 메뉴
 
-기본 부트스트랩 계정:
+| 메뉴 | 하는 일 |
+|---|---|
+| 대시보드 | 팀 KPI, 추세, 공수, 리뷰 상태 요약 |
+| 개발자 | 개인별 점수와 비교 |
+| 설정 | 프로젝트 연결, 멤버 매핑, 그룹, 가중치 관리 |
+| 데이터 동기화 | Jira/GitLab 최신 데이터 수집 |
+| Test Harness | Owner 전용 운영 검증 플로우 실행과 회귀 테스트 |
+| Passkey 관리 | 현재 기기에 Passkey 등록/삭제 |
+| 비밀번호 변경 | 현재 비밀번호 확인 후 새 비밀번호 설정 |
 
-```text
-이메일: owner@example.com
-비밀번호: ChangeMe123!
-```
+## 12. 자주 겪는 문제
 
-버전 `v0.5.0` 기준으로 로그인 후에는 기본 다크 테마가 적용되며, 첫 진입 시 최신 릴리즈 모달을 확인할 수 있습니다.
+### 실행이 안 될 때
 
-### 7단계: 종료/재시작
+먼저 아래만 확인해 주세요.
 
-개발을 마친 뒤 Postgres만 내려두고 싶다면:
+- Node.js 20 이상이 설치되어 있는가
+- Docker Desktop이 켜져 있는가
+- `pnpm run dev:mac` 또는 `pnpm run dev:windows`로 실행했는가
 
-```bash
-docker stop teamscope-postgres
-```
+### 로그인은 되는데 데이터가 비어 있을 때
 
-macOS에서 Colima까지 같이 내리려면:
+대부분은 아래 원인입니다.
 
-```bash
-colima stop
-```
+- Jira/GitLab 프로젝트 연결이 아직 안 됨
+- PAT 또는 URL이 잘못됨
+- 아직 `데이터 동기화`를 실행하지 않음
+- 멤버 매핑이 비어 있어 개발자 데이터가 연결되지 않음
 
-Windows에서는 Docker Desktop만 종료하면 됩니다.
+### 초대 링크를 받았는데 처음이다
+
+아래 순서를 권장합니다.
+
+1. 링크 열기
+2. 로그인 완료
+3. 비밀번호 변경
+4. 필요하면 Passkey 등록
 
 ---
 
-## 로그인 및 권한 구조
+# 2부. 개발자 백서
 
-### 로그인 화면
+## 1. 설계 목표
 
-- 로그인 화면은 기존 TeamScope 디자인 톤을 유지한 인증 화면입니다.
-- 좌측에는 실제 TeamScope 다크모드 실행 화면 GIF가, 우측에는 로그인 카드가 배치됩니다.
-- 로그인 방식:
-  - Passkey 로그인
-  - 이메일 + 비밀번호 로그인
-  - Magic Link 로그인
-- `What's new`는 페이지 이동이 아니라 changelog 모달로 열립니다.
+TeamScope는 단순한 화면 프로젝트가 아니라 `운영 대시보드`로 설계되었습니다.  
+그래서 구현의 중심도 아래 세 가지였습니다.
 
-### 기본 부트스트랩 계정
+- 데이터 소스가 여러 개여도 한 워크스페이스 안에서 같은 사람으로 연결할 것
+- 점수 계산이 설명 가능하고 재현 가능할 것
+- 인증, 권한, 초대, 세션이 운영 도구 수준으로 일관될 것
 
-초기 시드 후에는 아래 계정으로 바로 로그인할 수 있습니다.
+## 2. 기술 스택
 
-```text
-이메일: owner@example.com
-비밀번호: ChangeMe123!
-이름: TeamScope Owner
+| 영역 | 기술 |
+|---|---|
+| 프레임워크 | Next.js App Router |
+| UI | React 19, Tailwind CSS 4 |
+| 인증 | Better Auth, Passkey(WebAuthn), nextCookies |
+| DB | PostgreSQL |
+| ORM | Prisma |
+| 데이터 연동 | Jira REST API, GitLab REST API |
+| 시각화 | Recharts, react-grid-layout |
+| 상태/페칭 | TanStack Query |
+| 유효성/입력 | Zod |
+| 보안 해시 | Argon2id (`@node-rs/argon2`) |
+
+## 3. 아키텍처 흐름
+
+```mermaid
+flowchart LR
+  U["사용자"] --> A["Next.js UI"]
+  A --> B["App Router API"]
+  B --> C["Better Auth"]
+  B --> D["Scoring Engine"]
+  B --> E["Jira / GitLab Clients"]
+  C --> F["PostgreSQL / Prisma"]
+  D --> F
+  E --> G["Jira REST API"]
+  E --> H["GitLab REST API"]
+  F --> A
 ```
 
-### 권한 체계
+핵심은 `UI -> API -> Prisma/Postgres` 흐름 위에, 인증과 동기화와 스코어링이 각각 독립 모듈로 올라가 있는 구조입니다.
 
-| 권한 | 설명 | 주요 가능 작업 |
-|------|------|----------------|
-| Owner | 워크스페이스 최고 관리자 | 사용자 초대, 로그인 계정 직접 생성, 프로젝트/멤버/가중치/동기화 관리 |
-| Maintainer | 운영 관리자 | 프로젝트/멤버 매핑/동기화 관리, 일부 설정 관리 |
-| Developer | 일반 사용자 | 대시보드/개발자 상세 조회 |
-| Reporter | 조회 전용 | 읽기 중심 조회 및 리포트 확인 |
-| Guest | 제한 조회 | 일부 요약 화면만 확인 |
+## 4. 인증과 보안
 
-### 화면 노출 예시
+### 4-1. 로그인 방식
 
-- `Owner`만:
-  - `로그인 계정 직접 생성`
-- `Owner`, `Maintainer`:
-  - 데이터 동기화
-  - 프로젝트/멤버 관리
-- `Guest`:
-  - 제한된 대시보드 요약
+현재 프로젝트는 세 가지 보안 동선을 가집니다.
 
-즉, 로그인 후에는 **사용자별 워크스페이스와 권한에 맞는 메뉴/화면만 보이도록** 구성되어 있습니다.
+- 이메일/비밀번호 로그인
+- 초대 링크 기반 1회성 진입
+- Passkey(WebAuthn) 로그인
 
----
+일반 공개 로그인 화면의 Magic Link 발송은 아직 숨겨져 있고, 실제 운영에서는 `초대 링크`가 Magic Link 역할을 대신합니다.
 
-## 공개 업로드 체크리스트
+### 4-2. 비밀번호 저장 방식
 
-GitHub 등 공개 저장소에 업로드하기 전 아래 항목을 확인하세요.
+현재 비밀번호 해시는 `Argon2id`를 사용합니다.
 
-1. `.env`, `.env.local`은 커밋하지 않습니다.
-2. `dev.db`, `prisma/dev.db` 같은 로컬 DB 파일은 커밋하지 않습니다.
-3. API 토큰(PAT)과 사내 계정/실명 데이터는 코드에 하드코딩하지 않습니다.
-4. 환경변수는 `.env.local.example` 템플릿만 공유합니다.
+적용 파일:
 
-이 저장소는 기본적으로 위 항목이 `.gitignore`에 반영되어 있습니다.
+- [src/lib/auth/password.ts](/Users/amore/team-scope/src/lib/auth/password.ts)
+- [src/lib/auth/server.ts](/Users/amore/team-scope/src/lib/auth/server.ts)
 
----
+구성 요약:
 
-## 환경 변수 설정
+- 알고리즘: `Argon2id`
+- 메모리 비용: `19 * 1024`
+- 반복 횟수: `2`
+- 병렬도: `1`
+- 출력 길이: `32`
+- 입력 정규화: `NFKC`
 
-`.env.local` 파일에 아래 값을 설정합니다:
+이 선택은 OWASP의 Password Storage Cheat Sheet와 Argon2 RFC 9106 방향에 맞췄습니다.
 
-```bash
-# Jira 설정 (온프레미스 Server/Data Center)
-JIRA_BASE_URL=https://your-jira-instance.com
-JIRA_PAT=your_jira_personal_access_token
-JIRA_PROJECT_KEY=YOUR_PROJECT
+추가로 중요한 점:
 
-# GitLab 설정 (Self-Managed CE/EE)
-GITLAB_BASE_URL=https://your-gitlab-instance.com
-GITLAB_PAT=your_gitlab_project_or_group_access_token
-GITLAB_PROJECT_ID=123
+- 기존 계정 중 예전 해시(`better-auth` 기본 scrypt)는 `verify` 단계에서 계속 로그인 가능
+- 새 비밀번호 저장부터는 Argon2id 사용
+- 즉, `점진적 마이그레이션` 구조입니다
 
-# PostgreSQL
-DATABASE_URL=postgresql://teamscope:teamscope@127.0.0.1:54329/teamscope?schema=public
+### 4-3. Passkey(WebAuthn)
 
-# 앱 URL
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+Passkey는 [src/lib/auth/server.ts](/Users/amore/team-scope/src/lib/auth/server.ts)에서 Better Auth Passkey 플러그인으로 구성되어 있습니다.
 
-# 초기 Owner 계정
-BOOTSTRAP_OWNER_EMAIL=owner@example.com
-BOOTSTRAP_OWNER_NAME=TeamScope Owner
-BOOTSTRAP_OWNER_PASSWORD=ChangeMe123!
+동작 방식:
 
-# 동기화 스케줄 (cron 형식, 기본: 6시간마다)
-SYNC_CRON_SCHEDULE=0 */6 * * *
+1. 서버가 challenge와 RP 정보(`rpName`, `origin`, `rpID`)를 생성
+2. 브라우저/OS 인증기가 기기 안에서 개인키/공개키 쌍 생성
+3. 서버는 공개키와 `credentialID`만 저장
+4. 로그인 시 새 challenge에 대해 기기 개인키로 서명
+5. 서버가 저장된 공개키로 검증 후 세션 발급
+
+보안상 의미:
+
+- 개인키는 서버로 전송되지 않음
+- 피싱 저항성이 비밀번호보다 높음
+- 브라우저가 지원하지 않으면 기능이 자동 제한됨
+
+관련 구현:
+
+- [src/components/auth/PasskeyManagerDialog.tsx](/Users/amore/team-scope/src/components/auth/PasskeyManagerDialog.tsx)
+- [src/components/auth/LoginPageClient.tsx](/Users/amore/team-scope/src/components/auth/LoginPageClient.tsx)
+
+### 4-4. 초대 링크와 계정 생성
+
+SMTP를 쓰지 않고도 온보딩할 수 있도록, 워크스페이스 초대는 `verification` 테이블에 1회용 토큰을 만들고 링크를 반환하는 방식으로 바뀌었습니다.
+
+핵심 파일:
+
+- [src/app/api/workspace/members/route.ts](/Users/amore/team-scope/src/app/api/workspace/members/route.ts)
+- [src/lib/auth/session.ts](/Users/amore/team-scope/src/lib/auth/session.ts)
+
+흐름:
+
+1. Owner/Maintainer가 이메일과 역할로 초대 생성
+2. 서버가 7일 TTL의 verification token 저장
+3. `loginUrl` 반환
+4. 링크를 열면 사용자 계정 생성
+5. pending invitation 자동 수락
+6. 워크스페이스 멤버십 자동 생성
+7. credential 계정이 없으면 초기 비밀번호 `qwer1234` 생성
+
+즉, SMTP 없이도 `초대 -> 가입 -> 워크스페이스 참여`가 끊기지 않도록 설계했습니다.
+
+### 4-5. 세션과 권한
+
+세션은 Better Auth의 cookie/session 모델을 사용하고, 현재 활성 워크스페이스는 세션의 `activeOrganizationId`로 유지합니다.
+
+핵심 특징:
+
+- 첫 사용자는 기본 워크스페이스 자동 bootstrap
+- 같은 이메일의 pending invitation 자동 수락
+- 마지막 활성 워크스페이스를 세션에 유지
+- API와 서버 컴포넌트 모두 `requireApiContext`, `requireServerRole`로 역할 검증
+
+## 5. Jira / GitLab 연동 방법
+
+### 5-1. 운영 관점
+
+실사용자는 보통 `설정 > 프로젝트 관리`에서 연결합니다.
+
+필요 정보:
+
+| 소스 | 필요한 값 |
+|---|---|
+| Jira | Base URL, PAT, Project Key |
+| GitLab 프로젝트 | Base URL, PAT, Project ID 또는 Path |
+| GitLab 그룹 | Base URL, PAT, Group URL 또는 Group Path |
+
+### 5-2. 개발 관점
+
+부트스트랩 시 `.env.local`에 값을 넣으면 시드 단계에서 기본 프로젝트를 미리 만들 수 있습니다.
+
+관련 환경 변수:
+
+- `JIRA_BASE_URL`
+- `JIRA_PAT`
+- `JIRA_PROJECT_KEY`
+- `GITLAB_BASE_URL`
+- `GITLAB_PAT`
+- `GITLAB_PROJECT_ID`
+
+시드 파일:
+
+- [prisma/seed.ts](/Users/amore/team-scope/prisma/seed.ts)
+
+### 5-3. 동기화 흐름
+
+동기화 엔드포인트:
+
+- [src/app/api/sync/route.ts](/Users/amore/team-scope/src/app/api/sync/route.ts)
+
+흐름:
+
+1. 워크스페이스의 활성 프로젝트 조회
+2. Jira 이슈 / GitLab MR / GitLab Note 수집
+3. 개발자 식별자 정규화 및 매핑
+4. 스냅샷 테이블에 upsert
+5. SyncLog 기록
+6. 이후 점수 API가 온디맨드 재계산
+
+GitLab은 그룹 URL과 프로젝트 URL을 모두 다룰 수 있도록 구현되어 있으며, 직접 식별 실패 시 검색 기반 fallback도 수행합니다.
+
+## 6. API 레이어 구조
+
+주요 내부 API는 아래 역할로 나뉩니다.
+
+| 엔드포인트 | 역할 |
+|---|---|
+| `/api/sync` | Jira/GitLab 데이터 동기화 |
+| `/api/scores` | 개발자 점수 계산 및 조회 |
+| `/api/dashboard-insights` | 대시보드 KPI, 추세, 리뷰/공수 인사이트 |
+| `/api/export` | Excel 내보내기 |
+| `/api/workspace/members` | 초대 생성, 역할 변경, 멤버 제거 |
+| `/api/workspace/users` | Owner 전용 로그인 계정 직접 생성 |
+| `/api/projects` | 연동 프로젝트 관리 |
+| `/api/project-members` | 외부 소스 멤버 조회와 매핑 |
+| `/api/flow-lab/graph` | Test Harness 그래프와 회귀 데이터셋 bootstrap |
+| `/api/flow-lab/runs` | 라이브 실행 시작 및 실행 이력 조회 |
+| `/api/flow-lab/runs/[id]` | 저장된 실행 결과 상세 조회 |
+| `/api/flow-lab/regression-runs` | 회귀 데이터셋 기반 검증 실행 |
+
+### 6-1. Owner 전용 Test Harness (Flow Lab)
+
+`/guide/flow-lab`는 운영 경로를 그래프처럼 따라가며 어느 단계가 깨졌는지 확인하는 Owner 전용 검증 화면입니다.
+
+핵심 파이프라인:
+
+- `Setup Validation`: 프로젝트 연결/인증 상태 확인
+- `Member Resolution`: 멤버 후보 조회와 매핑 범위 검증
+- `Identity Integrity`: 식별자 매칭과 중복 병합 위험 점검
+- `Snapshot Sync`: Jira/GitLab 스냅샷 수집 검증
+- `Analytics Build`: 점수 재계산과 월간 요약 뷰 확인
+- `Read Verification`: 대시보드와 개발자 상세 조회 경로 검증
+
+핵심 파일:
+
+- [src/components/flow-lab/FlowLabClient.tsx](/Users/amore/team-scope/src/components/flow-lab/FlowLabClient.tsx)
+- [src/lib/flow-lab/registry.ts](/Users/amore/team-scope/src/lib/flow-lab/registry.ts)
+- [src/lib/flow-lab/live-runner.ts](/Users/amore/team-scope/src/lib/flow-lab/live-runner.ts)
+- [src/lib/flow-lab/regression-runner.ts](/Users/amore/team-scope/src/lib/flow-lab/regression-runner.ts)
+
+실제로 할 수 있는 일:
+
+- 현재 워크스페이스 설정으로 라이브 검증 실행
+- 회귀 데이터셋 기반 재현 테스트 실행
+- 단계별 input/output/error/metrics 확인
+- Inspector용 분석 프롬프트 복사
+
+## 7. 데이터 모델 요약
+
+인증/권한 모델:
+
+- `user`
+- `session`
+- `account`
+- `verification`
+- `organization`
+- `member`
+- `invitation`
+- `passkey`
+
+운영/분석 모델:
+
+- `project`
+- `developer`
+- `projectDeveloper`
+- `developerGroup`
+- `jiraIssue`
+- `gitlabMR`
+- `gitlabNote`
+- `score`
+- `scoringWeight`
+- `dashboardLayout`
+- `syncLog`
+
+Prisma 스키마:
+
+- [prisma/schema.prisma](/Users/amore/team-scope/prisma/schema.prisma)
+
+### 데이터베이스 구조 한눈에 보기
+
+아래 다이어그램은 TeamScope의 핵심 테이블 관계를 요약한 것입니다.
+
+```mermaid
+erDiagram
+  User ||--o{ Session : has
+  User ||--o{ Account : has
+  User ||--o{ Member : joins
+  User ||--o{ Invitation : invites
+  User ||--o{ Passkey : owns
+
+  Organization ||--o{ Member : contains
+  Organization ||--o{ Invitation : has
+
+  Project ||--o{ JiraIssue : syncs
+  Project ||--o{ GitlabMR : syncs
+  Project ||--o{ ProjectDeveloper : maps
+  Project ||--o{ SyncLog : logs
+
+  DeveloperGroup ||--o{ Developer : groups
+  Developer ||--o{ ProjectDeveloper : assigned
+  Developer ||--o{ JiraIssue : assigned
+  Developer ||--o{ GitlabMR : authored
+  Developer ||--o{ GitlabNote : authored
+  Developer ||--o{ Score : measured
+
+  GitlabMR ||--o{ GitlabNote : contains
+
+  User {
+    string id PK
+    string email
+    string name
+    boolean emailVerified
+  }
+  Session {
+    string id PK
+    string userId FK
+    datetime expiresAt
+    string token
+    string activeOrganizationId
+  }
+  Account {
+    string id PK
+    string userId FK
+    string providerId
+    string password
+  }
+  Verification {
+    string id PK
+    string identifier
+    string value
+    datetime expiresAt
+  }
+  Organization {
+    string id PK
+    string slug
+    string name
+  }
+  Member {
+    string id PK
+    string organizationId FK
+    string userId FK
+    string role
+  }
+  Invitation {
+    string id PK
+    string organizationId FK
+    string inviterId FK
+    string email
+    string role
+    string status
+  }
+  Passkey {
+    string id PK
+    string userId FK
+    string credentialID
+    string publicKey
+  }
+  Project {
+    string id PK
+    string workspaceId
+    string type
+    string baseUrl
+    string token
+  }
+  Developer {
+    string id PK
+    string workspaceId
+    string name
+    string jiraUsername
+    string gitlabUsername
+    boolean isActive
+  }
+  DeveloperGroup {
+    string id PK
+    string workspaceId
+    string name
+  }
+  ProjectDeveloper {
+    string id PK
+    string projectId FK
+    string developerId FK
+  }
+  JiraIssue {
+    string id PK
+    string workspaceId
+    string issueKey
+    string assigneeId FK
+    string projectId FK
+    string ganttStartDate
+    date ganttStartOn
+    string dueDate
+    date dueOn
+  }
+  GitlabMR {
+    string id PK
+    string workspaceId
+    int mrIid
+    string authorId FK
+    string projectId FK
+    string mrCreatedAt
+    datetime mrCreatedAtTs
+    string mrMergedAt
+    datetime mrMergedAtTs
+  }
+  GitlabNote {
+    string id PK
+    string workspaceId
+    string mrId FK
+    string authorId FK
+    string noteCreatedAt
+    datetime noteCreatedAtTs
+  }
+  Score {
+    string id PK
+    string workspaceId
+    string developerId FK
+    string period
+    date periodStart
+    float compositeScore
+  }
+  ScoringWeight {
+    string id PK
+    string workspaceId
+    string key
+    float value
+  }
+  DashboardLayout {
+    string id PK
+    string workspaceId
+    string name
+    boolean isDefault
+  }
+  SyncLog {
+    string id PK
+    string workspaceId
+    string projectId FK
+    string status
+    datetime startedAt
+  }
 ```
 
-### PAT(Personal Access Token) 발급 방법
+### 테이블을 이해하는 가장 쉬운 방법
 
-**Jira PAT**:
-1. Jira에 로그인 → 프로필 → `개인 액세스 토큰`
-2. 토큰 이름 입력 → 만료일 설정 → `만들기`
-3. 생성된 토큰을 `JIRA_PAT`에 입력
+이 구조는 크게 4개 레이어로 보면 이해가 쉽습니다.
 
-**GitLab PAT**:
-1. GitLab에 로그인 → `설정` → `액세스 토큰`
-2. 이름 입력 → 범위 `api` 선택 → `토큰 만들기`
-3. 생성된 토큰을 `GITLAB_PAT`에 입력
+1. 인증/권한 레이어  
+   `User`, `Session`, `Account`, `Verification`, `Organization`, `Member`, `Invitation`, `Passkey`
 
-### 데이터베이스 참고
+2. 운영 기준정보 레이어  
+   `Project`, `Developer`, `DeveloperGroup`, `ProjectDeveloper`
 
-- 로컬 기본 포트: `54329`
-- 로컬 기본 계정: `teamscope / teamscope`
-- 데이터베이스명: `teamscope`
-- 앱은 현재 `SQLite`가 아니라 `PostgreSQL`을 사용합니다.
-- 가장 쉬운 시작 명령: `./scripts/dev-up.sh`
+3. 동기화 스냅샷 레이어  
+   `JiraIssue`, `GitlabMR`, `GitlabNote`
 
----
+4. 분석/설정 레이어  
+   `Score`, `ScoringWeight`, `DashboardLayout`, `SyncLog`
 
-## 프로젝트 구조
+즉, 외부 API 데이터를 바로 화면에 쓰지 않고, `스냅샷 저장 -> 분석 계산 -> 대시보드 조회` 구조를 한 번 거칩니다.
 
-```
-team-scope-dashboard/
-├── src/
-│   ├── app/                          # Next.js App Router 페이지
-│   │   ├── (public)/                 # 공개 페이지 (login, changelog)
-│   │   ├── (app)/                    # 보호 페이지 (dashboard, developer, settings, guide)
-│   │   └── api/                      # 인증/동기화/점수/워크스페이스 API
-│   │       ├── auth/                 # Better Auth 엔드포인트
-│   │       ├── sync/                 # 데이터 동기화
-│   │       ├── dashboard-insights/   # 대시보드 통합 분석 데이터
-│   │       ├── project-members/      # 프로젝트 기준 멤버 조회/저장
-│   │       ├── projects/             # 프로젝트 CRUD + 연결테스트
-│   │       └── workspace/            # 워크스페이스 멤버/사용자 관리
-│   ├── components/                   # UI 컴포넌트
-│   │   ├── auth/                     # 로그인 UI
-│   │   ├── changelog/                # 릴리즈 노트 모달/자동 오픈
-│   │   ├── dashboard/                # 대시보드 KPI/랭킹/추세/Gantt 위젯
-│   │   ├── settings/                 # 프로젝트/멤버/그룹/권한/가중치 설정
-│   │   ├── widget-grid/              # Datadog 스타일 위젯 그리드
-│   │   └── charts/                   # 인터랙티브 차트
-│   ├── lib/                          # 비즈니스 로직 (모듈별 독립)
-│   │   ├── auth/                     # Better Auth 서버/클라이언트/세션 컨텍스트
-│   │   ├── jira/                     # Jira REST API 클라이언트
-│   │   ├── gitlab/                   # GitLab REST API 클라이언트 및 URL 해석
-│   │   ├── members/                  # 자동 매핑/중복 병합 로직
-│   │   ├── projects/                 # 환경변수 기반 프로젝트 보강
-│   │   ├── scoring/                  # 스코어링 엔진
-│   │   ├── search/                   # 검색 전략 (텍스트/AI)
-│   │   ├── export/                   # 엑셀 빌더
-│   │   ├── db/                       # Prisma 클라이언트
-│   │   └── utils/                    # 공통 유틸리티
-│   ├── hooks/                        # 커스텀 React 훅
-│   └── common/                       # 공통 타입/상수
-├── prisma/schema.prisma              # DB 스키마
-└── .env.local.example                # 환경변수 템플릿
+### 데이터 흐름 다이어그램
+
+```mermaid
+flowchart TD
+  A["Jira API"] --> B["JiraIssue"]
+  C["GitLab API"] --> D["GitlabMR"]
+  C --> E["GitlabNote"]
+
+  F["Developer / ProjectDeveloper"] --> B
+  F --> D
+  F --> E
+
+  B --> G["Score"]
+  D --> G
+  E --> G
+
+  G --> H["dashboard_monthly_summary_mv"]
+  G --> I["대시보드 / 개발자 화면"]
+  H --> I
+
+  J["ScoringWeight"] --> G
+  K["DashboardLayout"] --> I
+  L["SyncLog"] --> I
 ```
 
----
+이 구조 덕분에 TeamScope는 외부 API 호출과 사용자 화면 렌더링을 느슨하게 분리합니다.
 
-## 스코어링 모델
+- 외부 API가 느려도 내부 스냅샷 기준으로 조회 가능
+- 점수 계산을 다시 돌려도 원본 스냅샷은 유지
+- 대시보드는 원시 이벤트를 매번 재집계하지 않아도 됨
 
-### Jira 업무 수행 점수 (100점 만점)
+## 8. 스코어링 설계
 
-| 항목 | 배점 | 계산 방식 |
-|------|------|----------|
-| 티켓 완료율 | 25점 | 완료 이슈 / 할당 이슈 |
-| 일정 준수율 | 25점 | WBSGantt 기준선 대비 실제 완료일 |
-| 공수 정확도 | 25점 | 계획 공수 vs 투입 공수 편차 |
-| 작업 기록 성실도 | 25점 | 워크로그 기록 빈도 |
+기본 가중치는 DORA, SPACE, PMI(EVM)를 TeamScope 지표로 환산한 추천값입니다.
 
-### GitLab 코드 품질 점수 (100점 만점)
+정의 파일:
 
-| 항목 | 배점 | 계산 방식 |
-|------|------|----------|
-| MR 생산성 | 20점 | 머지된 MR 수 (팀 평균 대비) |
-| 리뷰 참여도 | 25점 | 타인 MR에 남긴 코멘트 수 |
-| 피드백 반영도 | 20점 | 받은 코멘트 중 resolved 비율 |
-| MR 리드타임 | 20점 | 생성~머지 소요 시간 |
-| CI/CD 통과율 | 15점 | 파이프라인 성공률 |
+- [src/common/constants/scoring-weights.ts](/Users/amore/team-scope/src/common/constants/scoring-weights.ts)
 
-### 종합 점수
+현재 기본 가중치:
 
-```
-종합 = (Jira 점수 × 50%) + (GitLab 점수 × 50%)
-```
+### 종합 비중
 
-가중치는 `설정 > 스코어링 가중치` 페이지에서 자유롭게 조절할 수 있습니다.
+- Jira: `45%`
+- GitLab: `55%`
 
----
+### Jira 세부 가중치
 
-## 사용 가이드
+| 항목 | 가중치 | 의미 |
+|---|---:|---|
+| 티켓 완료율 | 25 | 완료 결과 |
+| 일정 준수율 | 30 | 계획 대비 진행 |
+| 공수 정확도 | 35 | 계획/실제 편차 |
+| 작업일지 성실도 | 10 | 기록 품질 |
 
-### 초기 설정
+### GitLab 세부 가중치
 
-1. **개발자 등록**: `설정 > 멤버 매핑`에서 팀원 이름과 Jira/GitLab 사용자명을 매핑
-2. **프로젝트 연결**: `설정 > 프로젝트 관리`에서 Jira/GitLab 프로젝트 추가 → `연결 테스트`
-3. **데이터 동기화**: 대시보드에서 `동기화` 버튼 클릭 또는 자동 스케줄 대기
+| 항목 | 가중치 | 의미 |
+|---|---:|---|
+| MR 생산성 | 10 | 팀 평균 대비 머지 산출 |
+| 코드 리뷰 참여도 | 15 | 리뷰 댓글 + 리뷰한 MR |
+| 피드백 반영률 | 20 | resolvable note 해결 비율 |
+| MR 리드 타임 | 30 | 생성부터 머지까지 소요 시간 |
+| CI 통과율 | 25 | 안정성 |
 
-### 대시보드 커스터마이징
+### 왜 이런 비중인가
 
-- **위젯 추가**: `Configure` 모드 → `+ 위젯 추가` 버튼
-- **위젯 이동**: 위젯 헤더를 드래그하여 원하는 위치로 이동
-- **위젯 크기 조절**: 위젯 오른쪽 하단 모서리를 드래그
-- **위젯 복제/삭제**: 위젯의 `⋯` 메뉴 또는 우클릭
+- `DORA`는 리드타임과 안정성을 강하게 봅니다.
+- `SPACE`는 단순 산출량이 아닌 협업과 품질을 함께 보라고 말합니다.
+- `PMI(EVM)`는 일정과 공수 편차를 통제 가능한 관리지표로 봅니다.
 
-### 차트 인터랙션
+그래서 TeamScope는 `Jira의 계획 실행력`과 `GitLab의 전달 품질`을 나눠 보고, 둘을 다시 종합 점수로 합칩니다.
 
-- **줌인**: 라인 차트에서 마우스를 드래그하여 영역 선택
-- **드릴다운**: 바 차트의 막대를 클릭하여 상세 데이터 확인
-- **범위 조절**: 차트 하단 브러시를 드래그하여 기간 조절
-- **호버 정보**: 차트 위에 마우스를 올리면 상세 툴팁 표시
+## 9. 점수 계산 로직
 
-### 엑셀 내보내기
+Jira 계산 파일:
 
-1. 대시보드 상단의 `엑셀 다운로드` 버튼 클릭
-2. 내보내기 범위(팀 전체/선택된 개발자) 선택
-3. 포함할 시트(팀 요약/Jira/GitLab) 선택
-4. `다운로드` 클릭
+- [src/lib/scoring/jira-score.ts](/Users/amore/team-scope/src/lib/scoring/jira-score.ts)
 
----
+GitLab 계산 파일:
 
-## API 엔드포인트
+- [src/lib/scoring/gitlab-score.ts](/Users/amore/team-scope/src/lib/scoring/gitlab-score.ts)
 
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| GET | `/api/dashboard-insights` | 대시보드 통합 분석 데이터 조회 |
-| POST | `/api/sync` | 데이터 동기화 실행 |
-| GET | `/api/scores?period=2026-03` | 점수 조회 |
-| POST | `/api/export` | 엑셀 파일 생성 및 다운로드 |
-| GET/POST | `/api/developers` | 개발자 목록/등록 |
-| GET/POST | `/api/project-members` | 프로젝트 기준 멤버 조회/저장 |
-| GET/POST/DELETE | `/api/projects` | 프로젝트 관리 |
-| POST | `/api/projects/test` | 프로젝트 연결 테스트 |
-| GET/POST | `/api/workspace/members` | 워크스페이스 초대 및 역할 관리 |
-| GET | `/api/workspace/users` | 워크스페이스 사용자 목록 조회 |
-| GET/POST | `/api/layouts` | 대시보드 레이아웃 저장/불러오기 |
+핵심 규칙:
 
----
+- Jira 완료율: 완료 티켓 비율
+- Jira 일정 준수율: 기대 진척도 대비 실제 진척도
+- Jira 공수 정확도: 계획 대비 실제 공수 편차
+- Jira 작업일지 성실도: 완료 이슈 대비 워크로그 기록 비율
+- GitLab MR 생산성: 팀 평균 대비 개인 머지 수
+- GitLab 리뷰 참여도: 댓글 5점 + 리뷰한 MR 30점 방식의 정규화
+- GitLab 피드백 반영률: 해결 가능한 note의 해결 비율
+- GitLab MR 리드 타임: 24시간 이내 만점, 72시간 초과 최소점
+- GitLab CI 통과율: 성공 파이프라인 비율
 
-## 커스터마이징
+## 10. 성능과 최적화 전략
 
-### 새 위젯 추가
+TeamScope는 대시보드처럼 자주 읽히는 화면이 많아서, DB와 계산 경로를 `조회 빈도 기준`으로 최적화했습니다.
 
-`src/components/widget-grid/_constants/widget-registry.ts`에 위젯을 등록합니다:
+이 섹션의 핵심은 "무조건 복잡한 알고리즘"보다, 운영 대시보드에 맞는 `범위 축소`, `캐시`, `배치화`, `휴리스틱`, `짧은 경로 우선` 전략을 조합했다는 점입니다.
 
-```typescript
-export const WIDGET_REGISTRY = {
-  // 기존 위젯들...
-  'my-new-widget': {
-    label: '새 위젯',
-    description: '위젯 설명',
-    defaultSize: { w: 4, h: 3 },
-    minSize: { w: 2, h: 2 },
-  },
-};
-```
+### 10-1. 워크스페이스 스코프 우선
 
-### 스코어링 로직 수정
+대부분의 핵심 테이블은 `workspaceId` 기준으로 먼저 잘리도록 설계했습니다.
 
-`src/lib/scoring/` 디렉토리에서 각 점수 계산 함수를 수정합니다:
-- `jira-score.ts`: Jira 관련 점수
-- `gitlab-score.ts`: GitLab 관련 점수
-- `composite.ts`: 종합 점수 및 등급
+예:
 
-### 새 데이터 소스 추가
+- `project`
+- `developer`
+- `jiraIssue`
+- `gitlabMR`
+- `gitlabNote`
+- `score`
+- `syncLog`
 
-`src/lib/` 아래에 새 모듈 디렉토리를 생성합니다:
+이렇게 하면 멀티 워크스페이스 구조에서도 쿼리 범위를 빠르게 줄일 수 있습니다.
 
-```
-src/lib/new-source/
-├── client.ts      # API 클라이언트
-├── queries.ts     # 데이터 수집 함수
-├── _types/index.ts
-└── index.ts
-```
+기술적으로는 가장 바깥 WHERE 절에서 먼저 `workspaceId`를 적용해 후보 집합을 줄이는 `partition pruning 성격의 스코프 컷`입니다.  
+전 테이블을 대상으로 조인하거나 집계하지 않고, 같은 워크스페이스 안에서만 읽도록 강제하는 것이 첫 번째 최적화입니다.
 
----
+### 10-2. 인덱스 최적화
 
-## 트러블슈팅
+Prisma 스키마에는 조회가 잦은 축에 인덱스를 배치했습니다.
 
-### `Can't reach database server at 127.0.0.1:54329`
+대표 예시:
 
-Postgres 컨테이너가 내려가 있거나 Colima가 꺼진 상태입니다.
+- `member (organizationId, role)`
+- `developer (workspaceId, isActive)`
+- `jiraIssue (workspaceId, assigneeId)`
+- `gitlabMR (workspaceId, authorId)`
+- `score (workspaceId, period)`
+- `scoringWeight (workspaceId, category)`
+- `syncLog (workspaceId, startedAt)`
 
-복구 순서:
+이 인덱스는 단순 조회 속도뿐 아니라 아래 두 가지 패턴을 위해 중요합니다.
 
-```bash
-colima start
-docker start teamscope-postgres
-```
+- `workspace + 상태/기간`으로 빠르게 최근 데이터만 찾기
+- `unique key + upsert`를 안정적으로 유지해 중복 계산과 중복 저장을 막기
 
-확인:
+즉, TeamScope의 인덱스는 단순 검색용이 아니라 `idempotent write path`와 `bounded read path`를 함께 고려한 배치입니다.
 
-```bash
-lsof -iTCP:54329 -sTCP:LISTEN
-docker ps
-```
+이번 최적화에서 실제로 추가한 인덱스는 아래 성격을 가집니다.
 
-### `prisma db seed`가 동작하지 않음
+- 인증/권한 조회 가속
+  - `account(userId, providerId)`
+  - `session(userId, updatedAt desc)`
+  - `member(organizationId, userId)`
+  - pending invitation 전용 partial index
+- 개발자 목록/점수 조회 가속
+  - 활성 개발자 전용 covering index
+  - `score(workspaceId, periodStart, developerId)`
+- 스냅샷 기간 조회 가속
+  - `JiraIssue(workspaceId, assigneeId, ganttStartOn / ganttEndOn / dueOn)`
+  - `GitlabMR(workspaceId, authorId, mrCreatedAtTs / mrMergedAtTs)`
+  - `GitlabNote(workspaceId, authorId, noteCreatedAtTs)`
 
-현재 저장소는 Prisma seed command가 package 설정에 연결되어 있지 않습니다.  
-대신 아래 명령으로 직접 실행합니다:
+관련 스크립트:
 
-```bash
-node --experimental-strip-types prisma/seed.ts
-```
+- [scripts/apply-performance-indexes.ts](/Users/amore/team-scope/scripts/apply-performance-indexes.ts)
 
-### 로그인 화면은 뜨는데 로그인 후 에러가 남
+### 10-2-1. 왜 빨라졌는가
 
-- `.env.local`의 `DATABASE_URL`이 실제 로컬 Postgres 포트와 맞는지 확인합니다.
-- `teamscope-postgres` 컨테이너가 살아 있는지 확인합니다.
-- `pnpm exec prisma db push`와 `node --experimental-strip-types prisma/seed.ts`를 다시 실행합니다.
+이전에는 문자열 날짜와 일반 인덱스를 조합해 기간 필터를 수행했기 때문에:
 
-### `prisma db push` 실패 시
+- 문자열 비교 비용이 있었고
+- 날짜 범위 검색이 최적화되기 어려웠고
+- 일부 쿼리는 `workspaceId`로 줄인 뒤에도 많은 후보를 다시 읽어야 했습니다
 
-```bash
-# Prisma 클라이언트 재생성
-npx prisma generate
+지금은 날짜 정규화 컬럼과 복합 인덱스를 통해:
 
-# DB 초기화 (데이터 삭제됨)
-rm -f prisma/dev.db
-npx prisma db push
-```
+- planner가 진짜 날짜 범위 조건을 사용
+- `workspaceId + assignee/author + 날짜` 축으로 인덱스 탐색 가능
+- heap 방문 없이 처리 가능한 조회가 늘어남
+- 정렬(`updatedAt desc`, `mrCreatedAtTs desc`)도 인덱스 친화적으로 바뀜
 
-### Jira/GitLab 연결 오류
+즉, 문자열 기반 스캔에서 `typed range scan + composite index probe`로 옮겨간 것이 핵심입니다.
 
-1. `설정 > 프로젝트 관리`에서 `연결 테스트` 실행
-2. PAT 만료 여부 확인
-3. 네트워크(VPN) 연결 상태 확인
-4. 서버 URL이 `/` 로 끝나지 않는지 확인
+### 10-2-2. DB 관측까지 포함한 최적화
 
-### 포트 충돌
+이번에는 인덱스만 넣은 것이 아니라, 실제 느린 쿼리를 수집할 수 있게 PostgreSQL 관측도 켰습니다.
 
-```bash
-# 다른 포트로 실행
-pnpm dev -- -p 3001
-```
+관련 스크립트:
 
----
+- [scripts/enable-pg-observability.ts](/Users/amore/team-scope/scripts/enable-pg-observability.ts)
+- [scripts/report-pg-slow-queries.ts](/Users/amore/team-scope/scripts/report-pg-slow-queries.ts)
 
-## FAQ
+활성화된 기능:
 
-**Q: Jira Cloud도 지원하나요?**
-A: 현재는 Jira Server/Data Center를 기준으로 구현되어 있습니다. Cloud 사용 시 인증 방식(API Token + Basic Auth)을 `src/lib/jira/client.ts`에서 수정하면 됩니다.
+- `pg_stat_statements`
+- `compute_query_id = auto`
 
-**Q: GitLab Premium/Ultimate 기능이 필요한가요?**
-A: 아닙니다. CE(Community Edition)의 REST API만으로 모든 기능이 동작합니다.
+이 의미는 다음과 같습니다.
 
-**Q: 데이터가 자동으로 동기화되나요?**
-A: `SYNC_CRON_SCHEDULE` 환경변수로 설정된 주기에 따라 자동 동기화됩니다. 기본값은 6시간마다입니다.
+- 감으로 느린 쿼리를 추정하지 않음
+- 실제 평균 실행 시간, 총 실행 시간, 호출 횟수 기반으로 병목 파악
+- 다음 인덱스/파티셔닝/MV 최적화도 측정 기반으로 진행 가능
 
-**Q: PostgreSQL이 꼭 필요한가요?**
-A: 현재 인증, 워크스페이스, Prisma 설정이 모두 PostgreSQL 기준으로 맞춰져 있습니다. SQLite 등 다른 저장소로 바꾸려면 어댑터, 세션 저장소, 스키마를 함께 조정해야 합니다.
+즉, 이번 최적화는 단발성 튜닝이 아니라 `관측 가능한 성능 개선 루프`를 만든 것입니다.
 
-**Q: Azure AI 검색은 언제 사용할 수 있나요?**
-A: `src/lib/search/prompt-search.ts`에 Azure OpenAI 연동 로직을 구현하면 검색 필터의 AI 모드가 활성화됩니다.
+### 10-3. 점수 캐시와 알고리즘 버전 관리
+
+점수는 매 요청마다 전부 재계산하지 않습니다.
+
+핵심 파일:
+
+- [src/app/api/scores/route.ts](/Users/amore/team-scope/src/app/api/scores/route.ts)
+
+전략:
+
+- `workspaceId + developerId + period`를 unique key로 저장
+- 이미 계산된 점수는 재사용
+- 누락된 개발자만 온디맨드 계산
+- `SCORE_ALGORITHM_VERSION`이 바뀌면 해당 점수만 재계산
+
+즉, 이것은 `lazy recomputation + versioned cache invalidation` 구조입니다.
+
+알고리즘 관점에서 보면:
+
+- `lazy materialization`: 요청이 실제로 들어온 developer/period 조합만 계산
+- `selective invalidation`: 점수 공식 버전이 바뀐 레코드만 골라서 무효화
+- `idempotent upsert`: 같은 키에 대해서는 다시 써도 결과가 안정적
+
+전체 월간 점수를 매번 전량 재계산하지 않고, 필요한 조합만 갱신하기 때문에 운영 규모가 커질수록 비용 차이가 커집니다.
+
+### 10-4. 배치 처리와 Map 버킷팅
+
+점수 계산 시 Jira 이슈와 GitLab MR을 한 번에 읽고, 이후 개발자 ID 기준으로 Map에 버킷팅합니다.
+
+효과:
+
+- 같은 배열을 개발자마다 다시 훑는 비용 감소
+- N x M 형태 재탐색 완화
+- Prisma `$transaction`으로 쓰기 묶음 처리
+
+이 부분은 사실상 `hash-based bucketing`입니다.
+
+동작 방식:
+
+1. Jira 이슈 전체를 한 번 순회
+2. `assigneeId`를 key로 Map에 적재
+3. GitLab MR도 `authorId`를 key로 Map에 적재
+4. 이후 각 개발자는 자신의 bucket만 읽음
+
+복잡도 관점:
+
+- 단순 구현: 개발자 수 D, 이슈 수 I, MR 수 M일 때 `O(D*I + D*M)`
+- 현재 구현: 버킷 생성 `O(I + M)`, 개발자 순회 `O(D)`에 가까움
+
+즉, 데이터가 커질수록 `전수 재스캔`을 `단일 스캔 + 인덱싱 조회`로 바꾸는 효과가 있습니다.
+
+또한 저장 단계는 `prisma.$transaction + upsert`로 묶여 있어, 부분 저장보다 I/O round-trip이 줄고 실패 시 일관성도 유지됩니다.
+
+### 10-5. 기간 범위 필터링 알고리즘
+
+점수 계산과 대시보드 조회는 특정 월이나 날짜 구간만 읽습니다. 이때 단순히 `createdAt between A and B`만 쓰지 않고, 일정이 겹치는 이슈도 포함하도록 `range overlap filtering`을 사용합니다.
+
+예를 들어 Jira 이슈는 아래 케이스를 함께 봅니다.
+
+- 시작일과 종료일이 조회 기간과 겹침
+- 시작일과 due date가 기간과 겹침
+- 종료일만 기간 안에 있음
+- due date만 기간 안에 있음
+- 일정 필드가 없으면 updatedAt으로 fallback
+
+이 방식은 스케줄형 데이터에서 자주 쓰는 `interval overlap query`에 가깝습니다.  
+덕분에 월간/분기 조회에서 "그 기간에 걸쳐 있던 작업"을 놓치지 않으면서도, 전 기간 데이터를 다 읽는 비효율은 피할 수 있습니다.
+
+이번 변경으로는 이 interval overlap query가 문자열이 아니라 정규화된 날짜 컬럼을 기준으로 수행되도록 바뀌었습니다.
+
+관련 보조 컬럼:
+
+- `JiraIssue.ganttStartOn`
+- `JiraIssue.ganttEndOn`
+- `JiraIssue.dueOn`
+- `GitlabMR.mrCreatedAtTs`
+- `GitlabMR.mrMergedAtTs`
+- `GitlabNote.noteCreatedAtTs`
+- `Score.periodStart`
+
+관련 스크립트:
+
+- [scripts/normalize-db-dates.ts](/Users/amore/team-scope/scripts/normalize-db-dates.ts)
+
+이 변화의 효과는 큽니다.
+
+- range 조건의 정확도 상승
+- 날짜 기반 인덱스 활용 가능
+- 파티셔닝 준비 완료
+- 문자열 파싱을 애플리케이션 레벨에서 반복하지 않아도 됨
+
+### 10-6. 개발자 식별자 매칭 휴리스틱
+
+핵심 파일:
+
+- [src/lib/members/identity.ts](/Users/amore/team-scope/src/lib/members/identity.ts)
+- [src/lib/members/duplicates.ts](/Users/amore/team-scope/src/lib/members/duplicates.ts)
+
+여기서는 단순 이름 일치가 아니라 가중치 점수 기반 휴리스틱을 씁니다.
+
+우선순위 예시:
+
+- Jira 사용자명 완전 일치
+- GitLab 사용자명 완전 일치
+- Jira/GitLab 교차 일치
+- 회사 식별자(`AC`, `AP`) 추출 일치
+- 이메일 local-part 일치
+- 정규화 이름 일치
+
+알고리즘적으로는 `weighted heuristic matching`입니다.
+
+특징:
+
+- 강한 증거에는 높은 점수(예: 120, 118)
+- 약한 증거에는 보조 점수(예: 82, 78)
+- 최고 점수가 동률이면 매칭하지 않음
+
+즉, 이 로직은 단순 fuzzy search가 아니라 `winner-takes-all with ambiguity rejection` 구조입니다.  
+잘못된 자동 매핑을 줄이기 위해, 애매하면 연결하지 않는 쪽을 선택합니다.
+
+중복 병합 시에는 다음 전략도 씁니다.
+
+- 더 신뢰도 높은 개발자 레코드를 primary로 선택
+- `createMany + skipDuplicates`로 프로젝트 매핑 병합
+- 관련 이슈, MR, 노트, 점수 데이터 일괄 이전
+
+즉, 사람 매칭은 단순 문자열 비교가 아니라 `가중치 기반 엔티티 정규화`에 가깝습니다.
+
+추가로 자동 병합은 `greedy maximal matching`에 가깝게 동작합니다.
+
+- 후보를 점수순으로 정렬
+- 이미 사용된 개발자 ID는 제외
+- 가장 신뢰도 높은 쌍부터 병합
+
+완전 탐색보다 단순하지만, 운영 도구에서는 `속도`, `예측 가능성`, `되돌리기 쉬움` 측면에서 실용적입니다.
+
+### 10-7. GitLab 대상 해석 최적화
+
+GitLab 동기화에서는 아래 순서로 대상을 해석합니다.
+
+1. URL/path에서 직접 group 또는 project 식별
+2. API direct lookup 시도
+3. 그래도 실패하면 search fallback
+
+이 순서는 불필요한 검색 호출을 줄이기 위한 것입니다.
+
+알고리즘적으로는 `short-circuit resolution with fallback search`입니다.
+
+의미:
+
+- 가장 확실하고 값싼 경로부터 시도
+- 실패할 때만 더 비싼 검색 경로로 이동
+- direct lookup이 성공하면 즉시 종료
+
+이 구조는 외부 API 연동에서 latency와 rate limit을 줄이는 데 유리합니다.
+
+### 10-8. 점수 계산식 자체의 정규화 알고리즘
+
+점수도 단순 합계가 아니라 `정규화 후 가중합(normalized weighted sum)`으로 계산합니다.
+
+예:
+
+- Jira 각 항목은 25점 만점 기준으로 정규화
+- GitLab 각 항목은 20/25/15점 등 서로 다른 최대치를 먼저 공통 비율로 환산
+- 이후 현재 활성 가중치 총합으로 다시 나눠 전체 100점 체계로 합산
+
+이 방식의 장점:
+
+- 항목 최대점이 달라도 비교 가능
+- 일부 지표가 없는 경우(active weight만 사용)에도 전체 점수가 비정상적으로 깎이지 않음
+- 가중치 슬라이더를 바꿔도 계산 일관성이 유지됨
+
+즉, TeamScope의 스코어링 엔진은 `heterogeneous metric normalization + weighted aggregation` 구조입니다.
+
+### 10-9. Materialized View 기반 월간 집계 최적화
+
+이번에는 대시보드 월별 추세에 대해 `materialized view`도 도입했습니다.
+
+관련 파일:
+
+- [scripts/setup-dashboard-materialized-view.ts](/Users/amore/team-scope/scripts/setup-dashboard-materialized-view.ts)
+- [scripts/refresh-dashboard-materialized-view.ts](/Users/amore/team-scope/scripts/refresh-dashboard-materialized-view.ts)
+- [src/lib/db/dashboard-monthly-summary.ts](/Users/amore/team-scope/src/lib/db/dashboard-monthly-summary.ts)
+
+생성되는 뷰:
+
+- `dashboard_monthly_summary_mv`
+
+이 뷰는 `Score` 테이블을 기준으로 아래를 월 단위로 미리 집계합니다.
+
+- developerCount
+- avgJira
+- avgGitlab
+- avgComposite
+
+왜 이게 빠른가:
+
+- 원래는 대시보드 추세를 볼 때마다 월 구간별로 다시 점수 계산/집계를 수행
+- 이제는 무필터 월간 추세의 경우 미리 계산된 요약 테이블을 읽기만 하면 됨
+
+즉, `on-demand aggregation` 일부를 `precomputed monthly snapshot`으로 바꾼 것입니다.
+
+이 접근은 PostgreSQL 공식 materialized view 전략과 잘 맞고, 대시보드처럼 읽기 빈도가 높은 화면에서 특히 효율적입니다.
+
+### 10-10. 아직 남아 있는 다음 단계: 월별 파티셔닝
+
+이번 작업으로 파티셔닝 자체는 아직 넣지 않았지만, 그 전제 작업은 끝냈습니다.
+
+왜 바로 파티셔닝을 넣지 않았는가:
+
+- 현재 `GitlabMR`와 `GitlabNote`는 foreign key 관계가 있음
+- PostgreSQL declarative partitioning은 unique/primary key와 partition key 설계가 같이 맞아야 함
+- 기존 `id`, `unique`, `upsert` 경로를 유지한 채 바로 파티셔닝하면 오히려 안정성을 해칠 수 있음
+
+그래서 이번 턴에서는 먼저:
+
+1. 관측 활성화
+2. 날짜 정규화
+3. 인덱스 최적화
+4. materialized view 도입
+
+까지를 안전하게 끝냈고, 다음 단계에서 `Score -> GitlabNote -> GitlabMR -> JiraIssue` 순으로 파티셔닝 리팩터링을 진행할 수 있는 기반을 마련했습니다.
+
+## 11. 개발자가 자주 쓰는 명령
+
+일상 개발과 운영 최적화 기준으로 아래 명령들이 핵심입니다.
+
+| 명령 | 용도 |
+|---|---|
+| `pnpm run dev:mac` | macOS 기준 로컬 DB 준비, 시드, 개발 서버 실행 |
+| `pnpm run dev:windows` | Windows 기준 로컬 DB 준비, 시드, 개발 서버 실행 |
+| `pnpm run lint` | ESLint 검사 |
+| `pnpm run build` | 프로덕션 빌드 검증 |
+| `pnpm run test:flow-lab` | Flow Lab 회귀 평가 로직 테스트 |
+| `pnpm run db:normalize-dates` | 문자열 날짜를 정규화된 날짜 컬럼으로 백필 |
+| `pnpm run db:optimize` | 복합 인덱스와 partial index 적용 |
+| `pnpm run db:observability` | `pg_stat_statements` 기반 관측 설정 |
+| `pnpm run db:pgstat` | 느린 쿼리 리포트 조회 |
+| `pnpm run db:analytics:init` | 월간 요약 materialized view 생성 |
+| `pnpm run db:analytics:refresh` | 월간 요약 materialized view 갱신 |
+
+## 12. 추천 코드 읽기 순서
+
+처음 기여하는 개발자라면 아래 순서가 이해가 빠릅니다.
+
+1. [src/lib/auth/server.ts](/Users/amore/team-scope/src/lib/auth/server.ts)
+2. [src/lib/auth/session.ts](/Users/amore/team-scope/src/lib/auth/session.ts)
+3. [prisma/schema.prisma](/Users/amore/team-scope/prisma/schema.prisma)
+4. [src/app/api/sync/route.ts](/Users/amore/team-scope/src/app/api/sync/route.ts)
+5. [src/app/api/scores/route.ts](/Users/amore/team-scope/src/app/api/scores/route.ts)
+6. [src/lib/scoring/jira-score.ts](/Users/amore/team-scope/src/lib/scoring/jira-score.ts)
+7. [src/lib/scoring/gitlab-score.ts](/Users/amore/team-scope/src/lib/scoring/gitlab-score.ts)
+8. [src/components/settings/_components/WorkspaceAccessForm.tsx](/Users/amore/team-scope/src/components/settings/_components/WorkspaceAccessForm.tsx)
+9. [src/components/flow-lab/FlowLabClient.tsx](/Users/amore/team-scope/src/components/flow-lab/FlowLabClient.tsx)
+10. [src/lib/flow-lab/registry.ts](/Users/amore/team-scope/src/lib/flow-lab/registry.ts)
+
+## 13. 현재 제한 사항
+
+- 공개 로그인 화면의 일반 Magic Link 발송은 아직 비활성화 상태입니다.
+- 초대 링크는 동작하지만 SMTP 메일 발송형 온보딩은 아직 아닙니다.
+- 초대 기반 초기 비밀번호 `qwer1234`는 반드시 첫 로그인 후 변경하는 운영 정책이 필요합니다.
+- Flow Lab(Test Harness)는 현재 Owner 전용이며, 프로젝트 연결과 기본 데이터가 있어야 의미 있는 결과를 볼 수 있습니다.
+
+## 14. 참고 문헌과 공식 자료
+
+- OWASP Password Storage Cheat Sheet  
+  [https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
+- RFC 9106: Argon2 Memory-Hard Function for Password Hashing  
+  [https://www.rfc-editor.org/rfc/rfc9106](https://www.rfc-editor.org/rfc/rfc9106)
+- DORA Metrics  
+  [https://dora.dev/guides/dora-metrics/](https://dora.dev/guides/dora-metrics/)
+- 2024 DORA Accelerate State of DevOps Report  
+  [https://dora.dev/research/2024/dora-report/2024-dora-accelerate-state-of-devops-report.pdf](https://dora.dev/research/2024/dora-report/2024-dora-accelerate-state-of-devops-report.pdf)
+- The SPACE of Developer Productivity  
+  [https://queue.acm.org/detail.cfm?id=3454124](https://queue.acm.org/detail.cfm?id=3454124)
+- PMI Earned Value Management 관점 자료  
+  [https://www.pmi.org/learning/library/monitoring-performance-against-baseline-10416](https://www.pmi.org/learning/library/monitoring-performance-against-baseline-10416)
+- Atlassian Kanban Metrics  
+  [https://www.atlassian.com/agile/project-management/kanban-metrics](https://www.atlassian.com/agile/project-management/kanban-metrics)

@@ -7,6 +7,7 @@ import { GitlabApiError } from '@/lib/gitlab/client';
 import { getGitlabApiOrigin, getGitlabGroupPathFromUrl, getGitlabProjectPathFromUrl } from '@/lib/gitlab/url';
 import { ensureEnvProjects, resolveEnvProjectToken } from '@/lib/projects/ensure-env-projects';
 import { extractCorporateIdentifier, normalizeIdentity, resolveDeveloperIdentityMatch } from '@/lib/members/identity';
+import { parseDateOnly, parseTimestamp } from '@/lib/db/normalized-date';
 import type { GitlabMRResponse } from '@/lib/gitlab/_types';
 
 /** 동기화 요청 바디 */
@@ -500,15 +501,20 @@ async function syncJiraProject(
       sprintState: issue.sprintState,
       storyPoints: issue.storyPoints,
       ganttStartDate: issue.ganttStartDate,
+      ganttStartOn: parseDateOnly(issue.ganttStartDate),
       ganttEndDate: issue.ganttEndDate,
+      ganttEndOn: parseDateOnly(issue.ganttEndDate),
       baselineStart: issue.baselineStart,
+      baselineStartOn: parseDateOnly(issue.baselineStart),
       baselineEnd: issue.baselineEnd,
+      baselineEndOn: parseDateOnly(issue.baselineEnd),
       ganttProgress: issue.ganttProgress,
       plannedEffort: issue.plannedEffort,
       actualEffort: issue.actualEffort,
       remainingEffort: issue.remainingEffort,
       timeSpent: issue.timeSpent,
       dueDate: issue.dueDate,
+      dueOn: parseDateOnly(issue.dueDate),
     };
 
     await prisma.jiraIssue.upsert({
@@ -726,7 +732,9 @@ async function syncGitlabProject(
           deletions: mr.deletions,
           sourceBranch: mr.sourceBranch,
           targetBranch: mr.targetBranch,
+          mrCreatedAtTs: parseTimestamp(mr.createdAt) ?? new Date(),
           mrMergedAt: mr.mergedAt,
+          mrMergedAtTs: parseTimestamp(mr.mergedAt),
           syncedAt: new Date(),
         },
         create: {
@@ -746,7 +754,9 @@ async function syncGitlabProject(
           sourceBranch: mr.sourceBranch,
           targetBranch: mr.targetBranch,
           mrCreatedAt: mr.createdAt,
+          mrCreatedAtTs: parseTimestamp(mr.createdAt) ?? new Date(),
           mrMergedAt: mr.mergedAt,
+          mrMergedAtTs: parseTimestamp(mr.mergedAt),
         },
         select: { id: true },
       });
@@ -779,6 +789,7 @@ async function syncGitlabProject(
             isResolvable: note.isResolvable,
             isResolved: note.isResolved,
             noteCreatedAt: note.createdAt,
+            noteCreatedAtTs: parseTimestamp(note.createdAt) ?? new Date(),
           },
           create: {
             workspaceId,
@@ -790,6 +801,7 @@ async function syncGitlabProject(
             isResolvable: note.isResolvable,
             isResolved: note.isResolved,
             noteCreatedAt: note.createdAt,
+            noteCreatedAtTs: parseTimestamp(note.createdAt) ?? new Date(),
           },
         });
       }

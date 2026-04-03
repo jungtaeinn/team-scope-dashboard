@@ -45,6 +45,7 @@ interface ApiResponse<T> {
 }
 
 const DEFAULT_ROLE: AppRole = 'developer';
+const ROLE_ORDER: AppRole[] = ['owner', 'maintainer', 'developer', 'reporter', 'guest'];
 
 function formatRelativeTime(value: string | null) {
   if (!value) return '-';
@@ -134,6 +135,20 @@ export function WorkspaceAccessForm() {
     () => (viewerRole === 'owner' ? APP_ROLES : APP_ROLES.filter((role) => role !== 'owner')),
     [viewerRole],
   );
+  const groupedMembers = useMemo(
+    () =>
+      Object.fromEntries(
+        ROLE_ORDER.map((role) => [role, members.filter((member) => member.role === role)]),
+      ) as Record<AppRole, WorkspaceMember[]>,
+    [members],
+  );
+  const groupedInvitations = useMemo(
+    () =>
+      Object.fromEntries(
+        ROLE_ORDER.map((role) => [role, invitations.filter((invitation) => invitation.role === role)]),
+      ) as Record<AppRole, WorkspaceInvitation[]>,
+    [invitations],
+  );
 
   const handleInvite = useCallback(async () => {
     if (!inviteEmail.trim()) return;
@@ -165,7 +180,7 @@ export function WorkspaceAccessForm() {
       setInviteEmail('');
       setInviteRole(DEFAULT_ROLE);
       setInviteLink(json.data.loginUrl);
-      setStatusMessage('초대가 생성되었습니다. 초대받은 사용자가 같은 이메일로 로그인하면 워크스페이스에 자동 참여합니다.');
+      setStatusMessage('초대 링크가 생성되었습니다. 링크를 열면 계정이 만들어지고, 초기 비밀번호는 qwer1234입니다.');
       await loadData();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : '초대를 생성하지 못했습니다.');
@@ -311,9 +326,9 @@ export function WorkspaceAccessForm() {
     if (!inviteLink) return;
     try {
       await navigator.clipboard.writeText(inviteLink);
-      setStatusMessage('로그인 링크를 복사했습니다.');
+      setStatusMessage('초대 링크를 복사했습니다.');
     } catch {
-      setErrorMessage('로그인 링크를 복사하지 못했습니다.');
+      setErrorMessage('초대 링크를 복사하지 못했습니다.');
     }
   }, [inviteLink]);
 
@@ -324,7 +339,7 @@ export function WorkspaceAccessForm() {
           <div className="space-y-1">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">워크스페이스 접근 관리</h3>
             <p className="text-sm text-muted-foreground">
-              이메일 초대를 만들고 역할을 관리합니다. 초대받은 사용자는 같은 이메일로 로그인하면 자동으로 워크스페이스에 참여합니다.
+              초대 링크를 만들고 역할을 관리합니다. 링크를 열면 계정이 생성되며 초기 비밀번호는 qwer1234입니다.
             </p>
             <p className="text-xs text-muted-foreground">{ownerHint}</p>
           </div>
@@ -380,7 +395,7 @@ export function WorkspaceAccessForm() {
                   onClick={() => void handleCopyLink()}
                   className="inline-flex items-center justify-center rounded-lg border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
                 >
-                  로그인 링크 복사
+                  초대 링크 복사
                 </button>
               </div>
             ) : null}
@@ -448,210 +463,488 @@ export function WorkspaceAccessForm() {
         </div>
       ) : null}
 
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
-        <table className="min-w-full divide-y divide-border">
-          <thead className="bg-muted/40">
-            <tr>
-              {['이름', '이메일', '역할', '최근 활동', '액션'].map((header) => (
-                <th
-                  key={header}
-                  className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground"
-                >
-                  {header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border bg-card">
-            {isLoading ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
+      {viewerRole === 'owner' ? (
+        <>
+          <div className="grid gap-3 md:grid-cols-5">
+            {ROLE_ORDER.map((role) => (
+              <div key={role} className="rounded-lg border border-border bg-card p-4">
+                <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">{ROLE_LABELS[role]}</p>
+                <p className="mt-2 text-2xl font-semibold text-foreground">{groupedMembers[role].length}</p>
+                <p className="mt-1 text-xs text-muted-foreground">등록 멤버</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-lg border border-border bg-card p-4">
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">권한 그룹별 계정</h3>
+              <p className="text-sm text-muted-foreground">
+                Owner는 계정을 권한 그룹별로 확인하고, 드롭다운에서 다른 역할 그룹으로 바로 분류할 수 있습니다.
+              </p>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              {isLoading ? (
+                <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
                   워크스페이스 멤버를 불러오는 중입니다...
-                </td>
-              </tr>
-            ) : members.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                </div>
+              ) : members.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
                   아직 등록된 멤버가 없습니다.
-                </td>
-              </tr>
-            ) : (
-              members.map((member) => {
-                const isDirty = roleDrafts[member.id] !== member.role;
+                </div>
+              ) : (
+                ROLE_ORDER.map((role) => {
+                  const roleMembers = groupedMembers[role];
+                  if (roleMembers.length === 0) return null;
 
-                return (
-                  <tr key={member.id} className="transition-colors hover:bg-accent/40">
-                    <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-foreground">
-                      {member.name}
-                      {member.isCurrentUser ? <span className="ml-2 text-xs text-muted-foreground">(나)</span> : null}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-muted-foreground">{member.email}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      {member.canEditRole ? (
-                        <SelectField
-                          dense
-                          value={roleDrafts[member.id]}
-                          onChange={(event) =>
-                            setRoleDrafts((prev) => ({
-                              ...prev,
-                              [member.id]: event.target.value as AppRole,
-                            }))
-                          }
-                        >
-                          {assignableRoles.map((role) => (
-                            <option key={role} value={role}>
-                              {ROLE_LABELS[role]}
-                            </option>
-                          ))}
-                        </SelectField>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-                          {ROLE_LABELS[member.role]}
-                        </span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-muted-foreground">
-                      {formatRelativeTime(member.lastActiveAt)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      <div className="flex items-center gap-1">
-                        {member.canEditRole ? (
-                          <button
-                            type="button"
-                            onClick={() => void handleUpdateMemberRole(member.id)}
-                            disabled={!isDirty || pendingActionId === member.id}
-                            className="rounded p-1 text-green-600 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-green-900/20"
-                            aria-label={`${member.name} 권한 저장`}
-                          >
-                            {pendingActionId === member.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                          </button>
-                        ) : null}
-                        {member.canRemove ? (
-                          <button
-                            type="button"
-                            onClick={() => void handleRemove('member', member.id)}
-                            disabled={pendingActionId === member.id}
-                            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-gray-800"
-                            aria-label={`${member.name} 제거`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        ) : null}
+                  return (
+                    <div key={role} className="overflow-x-auto rounded-lg border border-border">
+                      <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-3">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{ROLE_LABELS[role]}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{roleMembers.length}명</p>
+                        </div>
                       </div>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
-        <table className="min-w-full divide-y divide-border">
-          <thead className="bg-muted/40">
-            <tr>
-              {['대기 중 초대', '역할', '만료', '액션'].map((header) => (
-                <th
-                  key={header}
-                  className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground"
-                >
-                  {header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border bg-card">
-            {isLoading ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                      <table className="min-w-full divide-y divide-border">
+                        <thead className="bg-muted/40">
+                          <tr>
+                            {['이름', '이메일', '역할', '최근 활동', '액션'].map((header) => (
+                              <th
+                                key={header}
+                                className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground"
+                              >
+                                {header}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border bg-card">
+                          {roleMembers.map((member) => {
+                            const isDirty = roleDrafts[member.id] !== member.role;
+
+                            return (
+                              <tr key={member.id} className="transition-colors hover:bg-accent/40">
+                                <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-foreground">
+                                  {member.name}
+                                  {member.isCurrentUser ? (
+                                    <span className="ml-2 text-xs text-muted-foreground">(나)</span>
+                                  ) : null}
+                                </td>
+                                <td className="whitespace-nowrap px-4 py-3 text-sm text-muted-foreground">{member.email}</td>
+                                <td className="whitespace-nowrap px-4 py-3 text-sm">
+                                  {member.canEditRole ? (
+                                    <SelectField
+                                      dense
+                                      value={roleDrafts[member.id]}
+                                      onChange={(event) =>
+                                        setRoleDrafts((prev) => ({
+                                          ...prev,
+                                          [member.id]: event.target.value as AppRole,
+                                        }))
+                                      }
+                                    >
+                                      {assignableRoles.map((assignableRole) => (
+                                        <option key={assignableRole} value={assignableRole}>
+                                          {ROLE_LABELS[assignableRole]}
+                                        </option>
+                                      ))}
+                                    </SelectField>
+                                  ) : (
+                                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+                                      {ROLE_LABELS[member.role]}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="whitespace-nowrap px-4 py-3 text-sm text-muted-foreground">
+                                  {formatRelativeTime(member.lastActiveAt)}
+                                </td>
+                                <td className="whitespace-nowrap px-4 py-3 text-sm">
+                                  <div className="flex items-center gap-1">
+                                    {member.canEditRole ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleUpdateMemberRole(member.id)}
+                                        disabled={!isDirty || pendingActionId === member.id}
+                                        className="rounded p-1 text-green-600 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-green-900/20"
+                                        aria-label={`${member.name} 권한 저장`}
+                                      >
+                                        {pendingActionId === member.id ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <Save className="h-4 w-4" />
+                                        )}
+                                      </button>
+                                    ) : null}
+                                    {member.canRemove ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleRemove('member', member.id)}
+                                        disabled={pendingActionId === member.id}
+                                        className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-gray-800"
+                                        aria-label={`${member.name} 제거`}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border bg-card p-4">
+            <div className="space-y-1">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">권한 그룹별 대기 초대</h3>
+              <p className="text-sm text-muted-foreground">
+                초대도 역할별로 나뉘어 보여지며, Owner는 대기 중인 초대의 권한 그룹도 바로 재분류할 수 있습니다.
+              </p>
+            </div>
+
+            <div className="mt-4 space-y-4">
+              {isLoading ? (
+                <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
                   초대 내역을 불러오는 중입니다...
-                </td>
-              </tr>
-            ) : invitations.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                </div>
+              ) : invitations.length === 0 ? (
+                <div className="rounded-lg border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
                   대기 중인 초대가 없습니다.
-                </td>
-              </tr>
-            ) : (
-              invitations.map((invitation) => {
-                const isDirty = invitationRoleDrafts[invitation.id] !== invitation.role;
-                const statusClass =
-                  invitation.status === 'expired'
-                    ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
+                </div>
+              ) : (
+                ROLE_ORDER.map((role) => {
+                  const roleInvitations = groupedInvitations[role];
+                  if (roleInvitations.length === 0) return null;
 
-                return (
-                  <tr key={invitation.id} className="transition-colors hover:bg-accent/40">
-                    <td className="px-4 py-3 text-sm text-foreground">
-                      <div className="font-medium">{invitation.email}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {invitation.invitedByName} 초대 · {formatRelativeTime(invitation.createdAt)}
+                  return (
+                    <div key={role} className="overflow-x-auto rounded-lg border border-border">
+                      <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-3">
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">{ROLE_LABELS[role]}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">{roleInvitations.length}건</p>
+                        </div>
                       </div>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      {invitation.canEditRole ? (
-                        <SelectField
-                          dense
-                          value={invitationRoleDrafts[invitation.id]}
-                          onChange={(event) =>
-                            setInvitationRoleDrafts((prev) => ({
-                              ...prev,
-                              [invitation.id]: event.target.value as AppRole,
-                            }))
-                          }
-                        >
-                          {assignableRoles.map((role) => (
-                            <option key={role} value={role}>
-                              {ROLE_LABELS[role]}
-                            </option>
-                          ))}
-                        </SelectField>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-                          {ROLE_LABELS[invitation.role]}
-                        </span>
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', statusClass)}>
-                        {invitation.status === 'expired' ? '만료' : `대기 중 · ${formatRelativeTime(invitation.expiresAt)}`}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      <div className="flex items-center gap-1">
-                        {invitation.canEditRole ? (
-                          <button
-                            type="button"
-                            onClick={() => void handleUpdateInvitationRole(invitation.id)}
-                            disabled={!isDirty || pendingActionId === invitation.id}
-                            className="rounded p-1 text-green-600 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-green-900/20"
-                            aria-label={`${invitation.email} 초대 저장`}
-                          >
-                            {pendingActionId === invitation.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                          </button>
-                        ) : null}
-                        {invitation.canRemove ? (
-                          <button
-                            type="button"
-                            onClick={() => void handleRemove('invitation', invitation.id)}
-                            disabled={pendingActionId === invitation.id}
-                            className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-gray-800"
-                            aria-label={`${invitation.email} 초대 취소`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        ) : null}
-                      </div>
+
+                      <table className="min-w-full divide-y divide-border">
+                        <thead className="bg-muted/40">
+                          <tr>
+                            {['대기 중 초대', '역할', '만료', '액션'].map((header) => (
+                              <th
+                                key={header}
+                                className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground"
+                              >
+                                {header}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border bg-card">
+                          {roleInvitations.map((invitation) => {
+                            const isDirty = invitationRoleDrafts[invitation.id] !== invitation.role;
+                            const statusClass =
+                              invitation.status === 'expired'
+                                ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                                : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
+
+                            return (
+                              <tr key={invitation.id} className="transition-colors hover:bg-accent/40">
+                                <td className="px-4 py-3 text-sm text-foreground">
+                                  <div className="font-medium">{invitation.email}</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {invitation.invitedByName} 초대 · {formatRelativeTime(invitation.createdAt)}
+                                  </div>
+                                </td>
+                                <td className="whitespace-nowrap px-4 py-3 text-sm">
+                                  {invitation.canEditRole ? (
+                                    <SelectField
+                                      dense
+                                      value={invitationRoleDrafts[invitation.id]}
+                                      onChange={(event) =>
+                                        setInvitationRoleDrafts((prev) => ({
+                                          ...prev,
+                                          [invitation.id]: event.target.value as AppRole,
+                                        }))
+                                      }
+                                    >
+                                      {assignableRoles.map((assignableRole) => (
+                                        <option key={assignableRole} value={assignableRole}>
+                                          {ROLE_LABELS[assignableRole]}
+                                        </option>
+                                      ))}
+                                    </SelectField>
+                                  ) : (
+                                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+                                      {ROLE_LABELS[invitation.role]}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="whitespace-nowrap px-4 py-3 text-sm">
+                                  <span
+                                    className={cn(
+                                      'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                                      statusClass,
+                                    )}
+                                  >
+                                    {invitation.status === 'expired' ? '만료' : `대기 중 · ${formatRelativeTime(invitation.expiresAt)}`}
+                                  </span>
+                                </td>
+                                <td className="whitespace-nowrap px-4 py-3 text-sm">
+                                  <div className="flex items-center gap-1">
+                                    {invitation.canEditRole ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleUpdateInvitationRole(invitation.id)}
+                                        disabled={!isDirty || pendingActionId === invitation.id}
+                                        className="rounded p-1 text-green-600 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-green-900/20"
+                                        aria-label={`${invitation.email} 초대 저장`}
+                                      >
+                                        {pendingActionId === invitation.id ? (
+                                          <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                          <Save className="h-4 w-4" />
+                                        )}
+                                      </button>
+                                    ) : null}
+                                    {invitation.canRemove ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleRemove('invitation', invitation.id)}
+                                        disabled={pendingActionId === invitation.id}
+                                        className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-gray-800"
+                                        aria-label={`${invitation.email} 초대 취소`}
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="overflow-x-auto rounded-lg border border-border bg-card">
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-muted/40">
+                <tr>
+                  {['이름', '이메일', '역할', '최근 활동', '액션'].map((header) => (
+                    <th
+                      key={header}
+                      className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground"
+                    >
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border bg-card">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                      워크스페이스 멤버를 불러오는 중입니다...
                     </td>
                   </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                ) : members.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                      아직 등록된 멤버가 없습니다.
+                    </td>
+                  </tr>
+                ) : (
+                  members.map((member) => {
+                    const isDirty = roleDrafts[member.id] !== member.role;
+
+                    return (
+                      <tr key={member.id} className="transition-colors hover:bg-accent/40">
+                        <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-foreground">
+                          {member.name}
+                          {member.isCurrentUser ? <span className="ml-2 text-xs text-muted-foreground">(나)</span> : null}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-muted-foreground">{member.email}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-sm">
+                          {member.canEditRole ? (
+                            <SelectField
+                              dense
+                              value={roleDrafts[member.id]}
+                              onChange={(event) =>
+                                setRoleDrafts((prev) => ({
+                                  ...prev,
+                                  [member.id]: event.target.value as AppRole,
+                                }))
+                              }
+                            >
+                              {assignableRoles.map((role) => (
+                                <option key={role} value={role}>
+                                  {ROLE_LABELS[role]}
+                                </option>
+                              ))}
+                            </SelectField>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+                              {ROLE_LABELS[member.role]}
+                            </span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-muted-foreground">
+                          {formatRelativeTime(member.lastActiveAt)}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-sm">
+                          <div className="flex items-center gap-1">
+                            {member.canEditRole ? (
+                              <button
+                                type="button"
+                                onClick={() => void handleUpdateMemberRole(member.id)}
+                                disabled={!isDirty || pendingActionId === member.id}
+                                className="rounded p-1 text-green-600 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-green-900/20"
+                                aria-label={`${member.name} 권한 저장`}
+                              >
+                                {pendingActionId === member.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                              </button>
+                            ) : null}
+                            {member.canRemove ? (
+                              <button
+                                type="button"
+                                onClick={() => void handleRemove('member', member.id)}
+                                disabled={pendingActionId === member.id}
+                                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-gray-800"
+                                aria-label={`${member.name} 제거`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="overflow-x-auto rounded-lg border border-border bg-card">
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-muted/40">
+                <tr>
+                  {['대기 중 초대', '역할', '만료', '액션'].map((header) => (
+                    <th
+                      key={header}
+                      className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground"
+                    >
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border bg-card">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                      초대 내역을 불러오는 중입니다...
+                    </td>
+                  </tr>
+                ) : invitations.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                      대기 중인 초대가 없습니다.
+                    </td>
+                  </tr>
+                ) : (
+                  invitations.map((invitation) => {
+                    const isDirty = invitationRoleDrafts[invitation.id] !== invitation.role;
+                    const statusClass =
+                      invitation.status === 'expired'
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
+                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400';
+
+                    return (
+                      <tr key={invitation.id} className="transition-colors hover:bg-accent/40">
+                        <td className="px-4 py-3 text-sm text-foreground">
+                          <div className="font-medium">{invitation.email}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {invitation.invitedByName} 초대 · {formatRelativeTime(invitation.createdAt)}
+                          </div>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-sm">
+                          {invitation.canEditRole ? (
+                            <SelectField
+                              dense
+                              value={invitationRoleDrafts[invitation.id]}
+                              onChange={(event) =>
+                                setInvitationRoleDrafts((prev) => ({
+                                  ...prev,
+                                  [invitation.id]: event.target.value as AppRole,
+                                }))
+                              }
+                            >
+                              {assignableRoles.map((role) => (
+                                <option key={role} value={role}>
+                                  {ROLE_LABELS[role]}
+                                </option>
+                              ))}
+                            </SelectField>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+                              {ROLE_LABELS[invitation.role]}
+                            </span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-sm">
+                          <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium', statusClass)}>
+                            {invitation.status === 'expired' ? '만료' : `대기 중 · ${formatRelativeTime(invitation.expiresAt)}`}
+                          </span>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-sm">
+                          <div className="flex items-center gap-1">
+                            {invitation.canEditRole ? (
+                              <button
+                                type="button"
+                                onClick={() => void handleUpdateInvitationRole(invitation.id)}
+                                disabled={!isDirty || pendingActionId === invitation.id}
+                                className="rounded p-1 text-green-600 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-green-900/20"
+                                aria-label={`${invitation.email} 초대 저장`}
+                              >
+                                {pendingActionId === invitation.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                              </button>
+                            ) : null}
+                            {invitation.canRemove ? (
+                              <button
+                                type="button"
+                                onClick={() => void handleRemove('invitation', invitation.id)}
+                                disabled={pendingActionId === invitation.id}
+                                className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-gray-800"
+                                aria-label={`${invitation.email} 초대 취소`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </section>
   );
 }

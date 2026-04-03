@@ -4,8 +4,11 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import { DEFAULT_WORKSPACE_ID } from '@/lib/app-info';
+import { hashPassword } from '@/lib/auth/password';
 import { auth } from '@/lib/auth/server';
 import { normalizeRole, type AppRole } from '@/lib/auth/roles';
+
+const INVITED_USER_INITIAL_PASSWORD = 'qwer1234';
 
 export interface WorkspaceContext {
   user: {
@@ -92,9 +95,36 @@ async function acceptPendingInvitations(user: { id: string; email: string }) {
     select: { organizationId: true },
   });
   const existingOrganizationIds = new Set(existingMemberships.map((membership) => membership.organizationId));
+  const credentialAccount = await prisma.account.findFirst({
+    where: {
+      userId: user.id,
+      providerId: 'credential',
+    },
+    select: {
+      id: true,
+      password: true,
+    },
+  });
   const now = new Date();
+  const passwordHash =
+    credentialAccount || !invitations.length ? null : await hashPassword(INVITED_USER_INITIAL_PASSWORD);
 
   await prisma.$transaction([
+    ...(credentialAccount
+      ? []
+      : [
+          prisma.account.create({
+            data: {
+              id: randomUUID(),
+              accountId: user.id,
+              providerId: 'credential',
+              userId: user.id,
+              password: passwordHash,
+              createdAt: now,
+              updatedAt: now,
+            },
+          }),
+        ]),
     ...invitations
       .filter((invitation) => !existingOrganizationIds.has(invitation.organizationId))
       .map((invitation) =>

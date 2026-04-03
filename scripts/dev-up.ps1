@@ -121,9 +121,23 @@ if (-not (Test-Path $NodeModules)) {
   Write-Log "node_modules가 이미 있어 설치를 생략합니다"
 }
 
+Write-Log "PostgreSQL 관측 기능을 활성화합니다"
+Push-Location $RootDir
+pnpm run db:observability
+Pop-Location
+
 Write-Log "Prisma 스키마를 반영합니다"
 Push-Location $RootDir
 pnpm exec prisma db push
+
+Write-Log "날짜 정규화 컬럼을 백필합니다"
+pnpm run db:normalize-dates
+
+Write-Log "DB 성능 최적화 인덱스를 적용합니다"
+pnpm run db:optimize
+
+Write-Log "대시보드 materialized view를 준비합니다"
+pnpm run db:analytics:init
 
 Write-Log "기본 데이터를 시드합니다"
 node --experimental-strip-types prisma/seed.ts

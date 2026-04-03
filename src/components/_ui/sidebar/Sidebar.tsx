@@ -1,14 +1,16 @@
 'use client';
 
-import { useCallback, useState, type ComponentType } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore, type ComponentType } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BookOpen, Home, Menu, Settings, Users, X } from 'lucide-react';
+import { Activity, BookOpen, ChevronLeft, ChevronRight, Home, KeyRound, LockKeyhole, Menu, Settings, Users, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/_ui/theme-toggle';
 import { useLoadingBar } from '@/components/_ui/loading-bar';
 import { ChangelogDialog } from '@/components/changelog/ChangelogDialog';
-import type { AppNavigationItem } from '@/lib/auth/roles';
+import { PasskeyManagerDialog } from '@/components/auth/PasskeyManagerDialog';
+import { PasswordChangeDialog } from '@/components/auth/PasswordChangeDialog';
+import type { AppNavigationItem, AppRole } from '@/lib/auth/roles';
 
 const ICON_MAP = {
   home: Home,
@@ -20,17 +22,58 @@ const ICON_MAP = {
 interface SidebarProps {
   navigationItems: AppNavigationItem[];
   version: string;
+  role: AppRole;
+}
+
+const SIDEBAR_COLLAPSED_STORAGE_KEY = 'teamscope.sidebar.collapsed';
+const SIDEBAR_STATE_EVENT = 'teamscope-sidebar-state-change';
+
+function subscribeSidebarState(onStoreChange: () => void) {
+  if (typeof window === 'undefined') {
+    return () => undefined;
+  }
+
+  const handleChange = () => onStoreChange();
+  window.addEventListener('storage', handleChange);
+  window.addEventListener(SIDEBAR_STATE_EVENT, handleChange);
+
+  return () => {
+    window.removeEventListener('storage', handleChange);
+    window.removeEventListener(SIDEBAR_STATE_EVENT, handleChange);
+  };
+}
+
+function getSidebarCollapsedSnapshot() {
+  if (typeof window === 'undefined') return false;
+  return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true';
+}
+
+function getSidebarCollapsedServerSnapshot() {
+  return false;
+}
+
+function setSidebarCollapsed(nextValue: boolean) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(nextValue));
+  window.dispatchEvent(new Event(SIDEBAR_STATE_EVENT));
 }
 
 /**
  * 앱 사이드바 네비게이션 컴포넌트
  * @description 좌측 고정 사이드바로 주요 메뉴를 표시하며, 모바일에서는 햄버거 메뉴로 전환
  */
-export function Sidebar({ navigationItems, version }: SidebarProps) {
+export function Sidebar({ navigationItems, version, role }: SidebarProps) {
   const pathname = usePathname();
   const { start } = useLoadingBar();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const isCollapsed = useSyncExternalStore(
+    subscribeSidebarState,
+    getSidebarCollapsedSnapshot,
+    getSidebarCollapsedServerSnapshot,
+  );
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
+  const [isPasskeyOpen, setIsPasskeyOpen] = useState(false);
+  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
 
   const toggleMobile = useCallback(() => {
     setIsMobileOpen((prev) => !prev);
@@ -40,10 +83,21 @@ export function Sidebar({ navigationItems, version }: SidebarProps) {
     setIsMobileOpen(false);
   }, []);
 
+  useEffect(() => {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return;
+
+    document.documentElement.style.setProperty('--sidebar-width', isCollapsed ? '88px' : '260px');
+
+    return () => {
+      document.documentElement.style.setProperty('--sidebar-width', '260px');
+    };
+  }, [isCollapsed]);
+
   const isActive = useCallback(
     (href: string) => {
       if (href === '/') return pathname === '/';
-      return pathname.startsWith(href);
+      if (href === '/guide') return pathname === '/guide';
+      return pathname === href || pathname.startsWith(`${href}/`);
     },
     [pathname],
   );
@@ -69,20 +123,20 @@ export function Sidebar({ navigationItems, version }: SidebarProps) {
       <aside
         className={cn(
           'fixed left-0 top-0 z-40 flex h-screen flex-col border-r bg-[var(--card)]',
-          'w-[var(--sidebar-width)] transition-transform duration-200',
+          'w-[var(--sidebar-width)] transition-[width,transform] duration-200',
           isMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         )}
       >
         {/* 로고 영역 */}
-        <div className="flex h-16 shrink-0 items-center gap-2.5 border-b px-5">
+        <div className={cn('flex h-16 shrink-0 items-center border-b', isCollapsed ? 'justify-center px-3' : 'gap-2.5 px-5')}>
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--primary)] text-sm font-bold text-[var(--primary-foreground)]">
             T
           </div>
-          <span className="text-lg font-bold tracking-tight">TeamScope</span>
+          {!isCollapsed ? <span className="text-lg font-bold tracking-tight">TeamScope</span> : null}
         </div>
 
         {/* 네비게이션 */}
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+        <nav className={cn('flex-1 space-y-1 overflow-y-auto py-4', isCollapsed ? 'px-2' : 'px-3')}>
           {navigationItems.map((item) => {
             const active = isActive(item.href);
             const Icon = ICON_MAP[item.icon] ?? BookOpen;
@@ -94,35 +148,102 @@ export function Sidebar({ navigationItems, version }: SidebarProps) {
                   if (!active) start();
                   closeMobile();
                 }}
+                title={isCollapsed ? item.label : undefined}
                 className={cn(
-                  'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                  'flex rounded-lg text-sm font-medium transition-colors',
+                  isCollapsed ? 'justify-center px-2 py-3' : 'items-center gap-3 px-3 py-2.5',
                   active
                     ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
                     : 'text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]',
                 )}
               >
                 <Icon className="h-4.5 w-4.5 shrink-0" />
-                {item.label}
+                {!isCollapsed ? item.label : null}
               </Link>
             );
           })}
+
+          {role === 'owner' ? (
+            <Link
+              href="/guide/flow-lab"
+              onClick={() => {
+                if (!isActive('/guide/flow-lab')) start();
+                closeMobile();
+              }}
+              title={isCollapsed ? 'Test Harness' : undefined}
+              className={cn(
+                'mt-1 flex rounded-lg text-sm font-medium transition-colors',
+                isCollapsed ? 'justify-center px-2 py-3' : 'items-center gap-3 px-3 py-2.5',
+                isActive('/guide/flow-lab')
+                  ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
+                  : 'text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]',
+              )}
+            >
+              <Activity className="h-4.5 w-4.5 shrink-0" />
+              {!isCollapsed ? 'Test Harness' : null}
+            </Link>
+          ) : null}
         </nav>
 
-        {/* 하단: 테마 토글 + 정보 */}
-        <div className="border-t px-4 py-3 space-y-3">
-          <ThemeToggle />
+        <div className={cn('hidden lg:flex', isCollapsed ? 'justify-center px-2 pb-3' : 'justify-start px-4 pb-3')}>
           <button
             type="button"
-            onClick={() => setIsChangelogOpen(true)}
-            className="inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+            onClick={() => setSidebarCollapsed(!isCollapsed)}
+            className={cn(
+              'inline-flex items-center rounded-xl border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]',
+              isCollapsed ? 'h-11 w-11 justify-center' : 'h-11 gap-2 px-3',
+            )}
+            aria-label={isCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
+            title={isCollapsed ? '사이드바 펼치기' : '사이드바 접기'}
           >
-            <span>FE Team Scope v{version}</span>
-            <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]/80">by TAEINN</span>
+            {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            {!isCollapsed ? <span className="text-sm font-medium">사이드바 접기</span> : null}
           </button>
+        </div>
+
+        {/* 하단: 테마 토글 + 정보 */}
+        <div className={cn('space-y-2 border-t py-3', isCollapsed ? 'px-2' : 'px-4')}>
+          <button
+            type="button"
+            onClick={() => setIsPasskeyOpen(true)}
+            title={isCollapsed ? 'Passkey 관리' : undefined}
+            className={cn(
+              'inline-flex w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-medium text-[var(--card-foreground)] transition-colors hover:bg-[var(--accent)]',
+              isCollapsed ? 'justify-center' : 'items-center gap-2',
+            )}
+          >
+            <KeyRound className="h-4 w-4 text-[var(--primary)]" />
+            {!isCollapsed ? 'Passkey 관리' : null}
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsPasswordDialogOpen(true)}
+            title={isCollapsed ? '비밀번호 변경' : undefined}
+            className={cn(
+              'inline-flex w-full rounded-xl border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-sm font-medium text-[var(--card-foreground)] transition-colors hover:bg-[var(--accent)]',
+              isCollapsed ? 'justify-center' : 'items-center gap-2',
+            )}
+          >
+            <LockKeyhole className="h-4 w-4 text-[var(--primary)]" />
+            {!isCollapsed ? '비밀번호 변경' : null}
+          </button>
+          <ThemeToggle />
+          {!isCollapsed ? (
+            <button
+              type="button"
+              onClick={() => setIsChangelogOpen(true)}
+              className="inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+            >
+              <span>FE Team Scope v{version}</span>
+              <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]/80">by TAEINN</span>
+            </button>
+          ) : null}
         </div>
       </aside>
 
       <ChangelogDialog open={isChangelogOpen} onClose={() => setIsChangelogOpen(false)} />
+      <PasskeyManagerDialog open={isPasskeyOpen} onClose={() => setIsPasskeyOpen(false)} />
+      <PasswordChangeDialog open={isPasswordDialogOpen} onClose={() => setIsPasswordDialogOpen(false)} />
     </>
   );
 }

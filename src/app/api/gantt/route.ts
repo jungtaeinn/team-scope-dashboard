@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiContext } from '@/lib/auth/api';
 import { prisma } from '@/lib/db';
+import { formatDateOnly } from '@/lib/db/normalized-date';
 
 /**
  * GET /api/gantt
@@ -44,8 +45,8 @@ export async function GET(request: NextRequest) {
 
     const issueWhere: Record<string, unknown> = {
       workspaceId,
-      ganttStartDate: { not: null },
-      ganttEndDate: { not: null },
+      ganttStartOn: { not: null },
+      ganttEndOn: { not: null },
       assigneeId: { in: targetDeveloperIds },
       ...(projectIds?.length ? { projectId: { in: projectIds } } : {}),
     };
@@ -54,13 +55,14 @@ export async function GET(request: NextRequest) {
     const issues: any[] = await prisma.jiraIssue.findMany({
       where: issueWhere,
       include: { assignee: true, project: true },
-      orderBy: { ganttStartDate: 'asc' },
+      orderBy: { ganttStartOn: 'asc' },
     });
 
     const filtered = issues.filter((issue) => {
       if (!from && !to) return true;
-      const start = issue.ganttStartDate as string;
-      const end = issue.ganttEndDate as string;
+      const start = (issue.ganttStartDate as string | null) ?? formatDateOnly(issue.ganttStartOn);
+      const end = (issue.ganttEndDate as string | null) ?? formatDateOnly(issue.ganttEndOn);
+      if (!start || !end) return false;
       if (from && end < from) return false;
       if (to && start > to) return false;
       return true;
@@ -86,10 +88,10 @@ export async function GET(request: NextRequest) {
         status: issue.status,
         sprint: issue.sprintName ?? null,
         issueType: issue.issueType,
-        startDate: issue.ganttStartDate,
-        endDate: issue.ganttEndDate,
-        baselineStart: issue.baselineStart,
-        baselineEnd: issue.baselineEnd,
+        startDate: issue.ganttStartDate ?? formatDateOnly(issue.ganttStartOn),
+        endDate: issue.ganttEndDate ?? formatDateOnly(issue.ganttEndOn),
+        baselineStart: issue.baselineStart ?? formatDateOnly(issue.baselineStartOn),
+        baselineEnd: issue.baselineEnd ?? formatDateOnly(issue.baselineEndOn),
         progress: issue.ganttProgress,
         plannedEffort: issue.plannedEffort,
         actualEffort: issue.actualEffort,

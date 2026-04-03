@@ -29,7 +29,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       include: {
         project: { select: { type: true, name: true, projectKey: true, baseUrl: true } },
       },
-      orderBy: [{ mrCreatedAt: 'desc' }],
+      orderBy: [{ mrCreatedAtTs: 'desc' }],
       take: 200,
     });
 

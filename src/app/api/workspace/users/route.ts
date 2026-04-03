@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
-import { hashPassword } from 'better-auth/crypto';
 import { prisma } from '@/lib/db';
 import { requireApiContext } from '@/lib/auth/api';
+import { hashPassword } from '@/lib/auth/password';
+import { PASSWORD_MIN_LENGTH } from '@/lib/auth/password-policy';
 import { APP_ROLES, type AppRole } from '@/lib/auth/roles';
 
 function json(data: unknown, init?: ResponseInit) {
@@ -38,7 +39,9 @@ export async function POST(request: Request) {
   if (!name) return error('이름을 입력해 주세요.');
   if (!email) return error('이메일을 입력해 주세요.');
   if (!role) return error('유효한 역할을 선택해 주세요.');
-  if (password.length < 4) return error('비밀번호는 최소 4자리 이상이어야 합니다.');
+  if (password.length < PASSWORD_MIN_LENGTH) {
+    return error(`비밀번호는 최소 ${PASSWORD_MIN_LENGTH}자리 이상이어야 합니다.`);
+  }
 
   const passwordHash = await hashPassword(password);
   const existingUser = await prisma.user.findUnique({

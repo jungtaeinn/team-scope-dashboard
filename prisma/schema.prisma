@@ -226,15 +226,20 @@ model JiraIssue {
   sprintState     String?
   storyPoints     Float?
   ganttStartDate  String?
+  ganttStartOn    DateTime? @db.Date
   ganttEndDate    String?
+  ganttEndOn      DateTime? @db.Date
   baselineStart   String?
+  baselineStartOn DateTime? @db.Date
   baselineEnd     String?
+  baselineEndOn   DateTime? @db.Date
   ganttProgress   Float?
   plannedEffort   Float?
   actualEffort    Float?
   remainingEffort Float?
   timeSpent       Int?
   dueDate         String?
+  dueOn           DateTime? @db.Date
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   syncedAt        DateTime  @default(now())
@@ -265,7 +270,9 @@ model GitlabMR {
   sourceBranch   String?
   targetBranch   String?
   mrCreatedAt    String
+  mrCreatedAtTs  DateTime?
   mrMergedAt     String?
+  mrMergedAtTs   DateTime?
   reviewLeadTime Int?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -293,6 +300,7 @@ model GitlabNote {
   isResolvable  Boolean   @default(false)
   isResolved    Boolean   @default(false)
   noteCreatedAt String
+  noteCreatedAtTs DateTime?
   createdAt     DateTime  @default(now())
 
   @@unique([workspaceId, noteId, mrId])
@@ -307,6 +315,7 @@ model Score {
   developerId    String
   developer      Developer @relation(fields: [developerId], references: [id])
   period         String
+  periodStart    DateTime? @db.Date
   jiraScore      Float     @default(0)
   gitlabScore    Float     @default(0)
   compositeScore Float     @default(0)
@@ -315,6 +324,7 @@ model Score {
 
   @@unique([workspaceId, developerId, period])
   @@index([workspaceId, period])
+  @@index([workspaceId, periodStart])
 }
 
 /// 대시보드 레이아웃 저장

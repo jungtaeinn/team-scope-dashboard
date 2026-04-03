@@ -2,11 +2,27 @@ import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
-import { hashPassword } from 'better-auth/crypto';
+import { hash as hashArgon2 } from '@node-rs/argon2';
 
 const connectionString = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/team_scope?schema=public';
 const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
+
+const ARGON2_MEMORY_COST = 19 * 1024;
+const ARGON2_TIME_COST = 2;
+const ARGON2_PARALLELISM = 1;
+const ARGON2_OUTPUT_LENGTH = 32;
+const ARGON2_ID = 2;
+
+async function hashPassword(password: string) {
+  return hashArgon2(password.normalize('NFKC'), {
+    algorithm: ARGON2_ID,
+    memoryCost: ARGON2_MEMORY_COST,
+    timeCost: ARGON2_TIME_COST,
+    parallelism: ARGON2_PARALLELISM,
+    outputLen: ARGON2_OUTPUT_LENGTH,
+  });
+}
 
 const DEFAULT_WORKSPACE_ID = 'default-workspace';
 const DEFAULT_WORKSPACE_NAME = '기본 워크스페이스';
