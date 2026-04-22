@@ -14,7 +14,7 @@
     "db:optimize": "node --experimental-strip-types scripts/apply-performance-indexes.ts",
     "db:analytics:init": "node --experimental-strip-types scripts/setup-dashboard-materialized-view.ts",
     "db:analytics:refresh": "node --experimental-strip-types scripts/refresh-dashboard-materialized-view.ts",
-    "dev:mac": "./scripts/dev-up.sh",
+    "dev:mac": "bash ./scripts/dev-up.sh",
     "dev:windows": "powershell -ExecutionPolicy Bypass -File ./scripts/dev-up.ps1",
     "dev:turbo": "next dev --turbopack",
     "build": "next build",

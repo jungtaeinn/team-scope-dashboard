@@ -141,16 +141,16 @@ model Passkey {
 
 /// 연동 프로젝트 (Jira, GitLab 등)
 model Project {
-  id          String    @id @default(cuid())
-  workspaceId String    @default("default-workspace")
+  id          String   @id @default(cuid())
+  workspaceId String   @default("default-workspace")
   name        String
   type        String
   baseUrl     String
   token       String
   projectKey  String?
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   jiraIssues JiraIssue[]
   gitlabMRs  GitlabMR[]
@@ -211,8 +211,8 @@ model DeveloperGroup {
 
 /// Jira 이슈 스냅샷
 model JiraIssue {
-  id              String    @id @default(cuid())
-  workspaceId     String    @default("default-workspace")
+  id              String     @id @default(cuid())
+  workspaceId     String     @default("default-workspace")
   issueKey        String
   summary         String
   status          String
@@ -220,29 +220,29 @@ model JiraIssue {
   assigneeId      String?
   assignee        Developer? @relation(fields: [assigneeId], references: [id])
   projectId       String
-  project         Project   @relation(fields: [projectId], references: [id])
+  project         Project    @relation(fields: [projectId], references: [id])
   priority        String?
   sprintName      String?
   sprintState     String?
   storyPoints     Float?
   ganttStartDate  String?
-  ganttStartOn    DateTime? @db.Date
+  ganttStartOn    DateTime?  @db.Date
   ganttEndDate    String?
-  ganttEndOn      DateTime? @db.Date
+  ganttEndOn      DateTime?  @db.Date
   baselineStart   String?
-  baselineStartOn DateTime? @db.Date
+  baselineStartOn DateTime?  @db.Date
   baselineEnd     String?
-  baselineEndOn   DateTime? @db.Date
+  baselineEndOn   DateTime?  @db.Date
   ganttProgress   Float?
   plannedEffort   Float?
   actualEffort    Float?
   remainingEffort Float?
   timeSpent       Int?
   dueDate         String?
-  dueOn           DateTime? @db.Date
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  syncedAt        DateTime  @default(now())
+  dueOn           DateTime?  @db.Date
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  syncedAt        DateTime   @default(now())
 
   @@unique([workspaceId, issueKey, projectId])
   @@index([workspaceId, assigneeId])
@@ -251,32 +251,32 @@ model JiraIssue {
 
 /// GitLab Merge Request 스냅샷
 model GitlabMR {
-  id             String    @id @default(cuid())
-  workspaceId    String    @default("default-workspace")
-  mrIid          Int
-  title          String
-  state          String
-  authorId       String?
-  author         Developer? @relation(fields: [authorId], references: [id])
-  projectId      String
-  project        Project   @relation(fields: [projectId], references: [id])
-  sourceProjectKey String  @default("")
-  sourceProjectName String?
+  id                  String     @id @default(cuid())
+  workspaceId         String     @default("default-workspace")
+  mrIid               Int
+  title               String
+  state               String
+  authorId            String?
+  author              Developer? @relation(fields: [authorId], references: [id])
+  projectId           String
+  project             Project    @relation(fields: [projectId], references: [id])
+  sourceProjectKey    String     @default("")
+  sourceProjectName   String?
   sourceProjectWebUrl String?
-  notesCount     Int       @default(0)
-  changesCount   Int?
-  additions      Int?
-  deletions      Int?
-  sourceBranch   String?
-  targetBranch   String?
-  mrCreatedAt    String
-  mrCreatedAtTs  DateTime?
-  mrMergedAt     String?
-  mrMergedAtTs   DateTime?
-  reviewLeadTime Int?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  syncedAt       DateTime  @default(now())
+  notesCount          Int        @default(0)
+  changesCount        Int?
+  additions           Int?
+  deletions           Int?
+  sourceBranch        String?
+  targetBranch        String?
+  mrCreatedAt         String
+  mrCreatedAtTs       DateTime?
+  mrMergedAt          String?
+  mrMergedAtTs        DateTime?
+  reviewLeadTime      Int?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  syncedAt            DateTime   @default(now())
 
   notes GitlabNote[]
 
@@ -288,20 +288,20 @@ model GitlabMR {
 
 /// GitLab MR 코멘트
 model GitlabNote {
-  id            String    @id @default(cuid())
-  workspaceId   String    @default("default-workspace")
-  noteId        Int
-  mrId          String
-  mr            GitlabMR  @relation(fields: [mrId], references: [id])
-  body          String
-  authorId      String?
-  author        Developer? @relation(fields: [authorId], references: [id])
-  isSystem      Boolean   @default(false)
-  isResolvable  Boolean   @default(false)
-  isResolved    Boolean   @default(false)
-  noteCreatedAt String
+  id              String     @id @default(cuid())
+  workspaceId     String     @default("default-workspace")
+  noteId          Int
+  mrId            String
+  mr              GitlabMR   @relation(fields: [mrId], references: [id])
+  body            String
+  authorId        String?
+  author          Developer? @relation(fields: [authorId], references: [id])
+  isSystem        Boolean    @default(false)
+  isResolvable    Boolean    @default(false)
+  isResolved      Boolean    @default(false)
+  noteCreatedAt   String
   noteCreatedAtTs DateTime?
-  createdAt     DateTime  @default(now())
+  createdAt       DateTime   @default(now())
 
   @@unique([workspaceId, noteId, mrId])
   @@index([workspaceId, authorId])
@@ -356,16 +356,64 @@ model ScoringWeight {
 
 /// 데이터 동기화 로그
 model SyncLog {
-  id          String   @id @default(cuid())
-  workspaceId String   @default("default-workspace")
+  id          String    @id @default(cuid())
+  workspaceId String    @default("default-workspace")
   projectId   String
-  project     Project  @relation(fields: [projectId], references: [id])
+  project     Project   @relation(fields: [projectId], references: [id])
   status      String
   message     String?
-  itemCount   Int      @default(0)
-  startedAt   DateTime @default(now())
+  itemCount   Int       @default(0)
+  startedAt   DateTime  @default(now())
   endedAt     DateTime?
 
   @@index([workspaceId, startedAt])
   @@index([workspaceId, projectId])
+}
+
+/// Flow Lab 실행 이력
+model FlowRun {
+  id          String        @id
+  workspaceId String
+  mode        String
+  scope       String
+  status      String
+  createdBy   String
+  projectId   String?
+  developerId String?
+  datasetKey  String?
+  strict      Boolean       @default(false)
+  period      String?
+  summary     Json?         @db.JsonB
+  startedAt   DateTime      @default(now()) @db.Timestamptz(6)
+  endedAt     DateTime?     @db.Timestamptz(6)
+  steps       FlowRunStep[]
+
+  @@index([workspaceId, startedAt(sort: Desc)], map: "FlowRun_workspace_startedAt_idx")
+}
+
+/// Flow Lab 실행 단계 이력
+model FlowRunStep {
+  id               String    @id
+  runId            String
+  run              FlowRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  nodeKey          String
+  pipelineKey      String
+  serviceKey       String
+  status           String
+  orderIndex       Int
+  targetType       String
+  targetId         String?
+  stale            Boolean   @default(false)
+  dirty            Boolean   @default(false)
+  summary          String?
+  inputPreview     Json?     @db.JsonB
+  outputPreview    Json?     @db.JsonB
+  metrics          Json?     @db.JsonB
+  artifacts        Json?     @db.JsonB
+  error            Json?     @db.JsonB
+  regressionChecks Json?     @db.JsonB
+  startedAt        DateTime  @default(now()) @db.Timestamptz(6)
+  endedAt          DateTime? @db.Timestamptz(6)
+
+  @@index([runId, orderIndex], map: "FlowRunStep_run_order_idx")
 }
