@@ -1,13 +1,15 @@
 import { NextResponse } from 'next/server';
 import { requireApiContext } from '@/lib/auth/api';
 import { prisma } from '@/lib/db';
+import { refreshDashboardMonthlySummaryView } from '@/lib/db/dashboard-monthly-summary';
+import { parseDateOnly, parseTimestamp } from '@/lib/db/normalized-date';
 import { createJiraClient, fetchProjectIssues } from '@/lib/jira';
 import { createGitlabClient, parseMergeRequest, parseNote } from '@/lib/gitlab';
 import { GitlabApiError } from '@/lib/gitlab/client';
 import { getGitlabApiOrigin, getGitlabGroupPathFromUrl, getGitlabProjectPathFromUrl } from '@/lib/gitlab/url';
+import { cleanupInactiveProjectData } from '@/lib/projects/cleanup-project-data';
 import { ensureEnvProjects, resolveEnvProjectToken } from '@/lib/projects/ensure-env-projects';
 import { extractCorporateIdentifier, normalizeIdentity, resolveDeveloperIdentityMatch } from '@/lib/members/identity';
-import { parseDateOnly, parseTimestamp } from '@/lib/db/normalized-date';
 import type { GitlabMRResponse } from '@/lib/gitlab/_types';
 
 /** 동기화 요청 바디 */
@@ -15,6 +17,9 @@ interface SyncRequestBody {
   /** 특정 프로젝트만 동기화 (미지정 시 전체 활성 프로젝트) */
   projectId?: string;
 }
+
+const activeSyncKeys = new Set<string>();
+const STALE_SYNC_LOG_MS = 30 * 60 * 1000;
 
 interface GitlabProjectSearchResponse {
   id: number;
@@ -45,11 +50,14 @@ type ResolvedGitlabTarget =
   | { kind: 'project'; id: string; displayName: string }
   | { kind: 'group'; id: string; displayName: string };
 
-function buildGitlabSyncAliases(developer: {
-  jiraUsername?: string | null;
-  gitlabUsername?: string | null;
-  name?: string | null;
-}, extraAliases: Array<string | null | undefined> = []) {
+function buildGitlabSyncAliases(
+  developer: {
+    jiraUsername?: string | null;
+    gitlabUsername?: string | null;
+    name?: string | null;
+  },
+  extraAliases: Array<string | null | undefined> = [],
+) {
   const aliases = new Set<string>();
   const normalizedGitlab = normalizeIdentity(developer.gitlabUsername);
   const normalizedJira = normalizeIdentity(developer.jiraUsername);
@@ -129,15 +137,12 @@ async function searchGitlabProjectPath(baseUrl: string, token: string, keyword: 
 
 async function searchGitlabGroupPath(baseUrl: string, token: string, keyword: string) {
   const apiOrigin = getGitlabApiOrigin(baseUrl);
-  const response = await fetch(
-    `${apiOrigin}/api/v4/groups?search=${encodeURIComponent(keyword)}&per_page=100`,
-    {
-      headers: {
-        'PRIVATE-TOKEN': token,
-        'Content-Type': 'application/json',
-      },
+  const response = await fetch(`${apiOrigin}/api/v4/groups?search=${encodeURIComponent(keyword)}&per_page=100`, {
+    headers: {
+      'PRIVATE-TOKEN': token,
+      'Content-Type': 'application/json',
     },
-  );
+  });
 
   if (!response.ok) {
     throw new GitlabApiError(
@@ -188,11 +193,7 @@ async function resolveGitlabTarget(params: {
     }
 
     if (response.status !== 404) {
-      throw new GitlabApiError(
-        `GitLab 그룹 조회 실패 (${response.status})`,
-        response.status,
-        `/groups/${groupId}`,
-      );
+      throw new GitlabApiError(`GitLab 그룹 조회 실패 (${response.status})`, response.status, `/groups/${groupId}`);
     }
   }
 
@@ -290,15 +291,12 @@ async function fetchGitlabGroupMembers(baseUrl: string, token: string, groupId: 
 
   const projects = await fetchGitlabGroupProjects(baseUrl, token, groupId);
   for (const project of projects) {
-    const membersResponse = await fetch(
-      `${apiOrigin}/api/v4/projects/${project.id}/members/all?per_page=100`,
-      {
-        headers: {
-          'PRIVATE-TOKEN': token,
-          'Content-Type': 'application/json',
-        },
+    const membersResponse = await fetch(`${apiOrigin}/api/v4/projects/${project.id}/members/all?per_page=100`, {
+      headers: {
+        'PRIVATE-TOKEN': token,
+        'Content-Type': 'application/json',
       },
-    );
+    });
 
     if (!membersResponse.ok) continue;
 
@@ -344,6 +342,22 @@ export async function POST(request: Request) {
     const workspaceId = authResult.context.workspace.id;
 
     await ensureEnvProjects(workspaceId);
+    const inactiveCleanup = await cleanupInactiveProjectData(workspaceId);
+    if (inactiveCleanup.scoreCount > 0) {
+      await refreshDashboardMonthlySummaryView();
+    }
+    await prisma.syncLog.updateMany({
+      where: {
+        workspaceId,
+        status: 'running',
+        startedAt: { lt: new Date(Date.now() - STALE_SYNC_LOG_MS) },
+      },
+      data: {
+        status: 'failed',
+        message: '동기화 요청이 완료되지 않아 정리되었습니다. 필요하면 다시 실행해 주세요.',
+        endedAt: new Date(),
+      },
+    });
 
     const body = (await request.json().catch(() => ({}))) as SyncRequestBody;
 
@@ -363,8 +377,16 @@ export async function POST(request: Request) {
     }
 
     let totalItemCount = 0;
+    let skippedProjectCount = 0;
 
     for (const project of projects) {
+      const syncKey = `${workspaceId}:${project.id}`;
+      if (activeSyncKeys.has(syncKey)) {
+        skippedProjectCount += 1;
+        continue;
+      }
+
+      activeSyncKeys.add(syncKey);
       const syncLog = await prisma.syncLog.create({
         data: {
           workspaceId,
@@ -405,13 +427,27 @@ export async function POST(request: Request) {
           },
         });
         console.error(`[Sync] ${project.name} 동기화 실패:`, error);
+      } finally {
+        activeSyncKeys.delete(syncKey);
       }
+    }
+
+    if (totalItemCount === 0 && skippedProjectCount === projects.length) {
+      return NextResponse.json({
+        success: true,
+        message: '이미 동기화가 진행 중인 프로젝트입니다. 중복 실행은 건너뛰었습니다.',
+        itemCount: 0,
+      });
     }
 
     return NextResponse.json({
       success: true,
-      message: `${projects.length}개 프로젝트에서 ${totalItemCount}건 동기화 완료`,
+      message:
+        skippedProjectCount > 0
+          ? `${projects.length - skippedProjectCount}개 프로젝트에서 ${totalItemCount}건 동기화 완료, ${skippedProjectCount}개는 진행 중이라 건너뜀`
+          : `${projects.length}개 프로젝트에서 ${totalItemCount}건 동기화 완료`,
       itemCount: totalItemCount,
+      cleanup: inactiveCleanup,
     });
   } catch (error) {
     console.error('[Sync] 동기화 실패:', error);
@@ -427,9 +463,10 @@ async function syncJiraProject(
   project: { id: string; baseUrl: string; token: string; projectKey: string | null },
 ) {
   if (!project.projectKey) return 0;
-  const token = project.token && project.token !== 'PENDING_TOKEN'
-    ? project.token
-    : resolveEnvProjectToken('jira', project.baseUrl);
+  const token =
+    project.token && project.token !== 'PENDING_TOKEN'
+      ? project.token
+      : resolveEnvProjectToken('jira', project.baseUrl);
   if (!token) {
     throw new Error(`${project.projectKey} Jira 프로젝트의 토큰이 설정되지 않았습니다.`);
   }
@@ -455,7 +492,9 @@ async function syncJiraProject(
   });
 
   const fields = await client.getFields();
-  const futureSprintFieldId = fields.find((f) => f.name === '미래의 스프린트' || f.name.toLowerCase() === 'future sprint')?.id;
+  const futureSprintFieldId = fields.find(
+    (f) => f.name === '미래의 스프린트' || f.name.toLowerCase() === 'future sprint',
+  )?.id;
   const developerAssigneeFieldIds = [
     fields.find((f) => f.name === '개발담당자(단일)')?.id,
     fields.find((f) => f.name === '개발 담당자' || f.name === '개발담당자')?.id,
@@ -470,10 +509,14 @@ async function syncJiraProject(
     select: { id: true, name: true, jiraUsername: true },
   });
   const developerByJiraUsername = new Map(
-    developers.filter((developer) => developer.jiraUsername).map((developer) => [normalizeIdentity(developer.jiraUsername), developer.id]),
+    developers
+      .filter((developer) => developer.jiraUsername)
+      .map((developer) => [normalizeIdentity(developer.jiraUsername), developer.id]),
   );
   const developerByName = new Map(
-    developers.filter((developer) => developer.name).map((developer) => [normalizeIdentity(developer.name), developer.id]),
+    developers
+      .filter((developer) => developer.name)
+      .map((developer) => [normalizeIdentity(developer.name), developer.id]),
   );
 
   for (const issue of issues) {
@@ -531,9 +574,10 @@ async function syncGitlabProject(
   workspaceId: string,
   project: { id: string; baseUrl: string; token: string; projectKey: string | null },
 ) {
-  const token = project.token && project.token !== 'PENDING_TOKEN'
-    ? project.token
-    : resolveEnvProjectToken('gitlab', project.baseUrl);
+  const token =
+    project.token && project.token !== 'PENDING_TOKEN'
+      ? project.token
+      : resolveEnvProjectToken('gitlab', project.baseUrl);
   if (!token) {
     throw new Error(`${project.projectKey ?? 'GitLab'} 프로젝트의 토큰이 설정되지 않았습니다.`);
   }
@@ -562,9 +606,7 @@ async function syncGitlabProject(
     token,
     projectKey: project.projectKey,
   });
-  const mappedDeveloperIds = new Set(
-    mappedProjectDevelopers.map((mapping) => mapping.developer.id),
-  );
+  const mappedDeveloperIds = new Set(mappedProjectDevelopers.map((mapping) => mapping.developer.id));
   const candidateDevelopers = workspaceDevelopers;
 
   const gitlabMembers = await fetchGitlabTargetMembers({
@@ -610,9 +652,7 @@ async function syncGitlabProject(
   const effectiveDeveloperById = new Map(
     effectiveWorkspaceDevelopers.map((developer) => [developer.id, developer] as const),
   );
-  const detectedGitlabMemberDevelopers = Array.from(
-    new Set([...matchedGitlabUsernameByDeveloperId.keys()]),
-  )
+  const detectedGitlabMemberDevelopers = Array.from(new Set([...matchedGitlabUsernameByDeveloperId.keys()]))
     .map((developerId) => effectiveDeveloperById.get(developerId))
     .filter((developer): developer is (typeof effectiveWorkspaceDevelopers)[number] => Boolean(developer));
   const syncScopeDevelopers =

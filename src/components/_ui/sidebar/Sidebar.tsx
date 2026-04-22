@@ -1,9 +1,21 @@
 'use client';
 
-import { useCallback, useEffect, useState, useSyncExternalStore, type ComponentType } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore, type ComponentType, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Activity, BookOpen, ChevronLeft, ChevronRight, Home, KeyRound, LockKeyhole, Menu, Settings, Users, X } from 'lucide-react';
+import {
+  Activity,
+  BookOpen,
+  ChevronLeft,
+  ChevronRight,
+  Home,
+  KeyRound,
+  LockKeyhole,
+  Menu,
+  Settings,
+  Users,
+  X,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/_ui/theme-toggle';
 import { useLoadingBar } from '@/components/_ui/loading-bar';
@@ -27,6 +39,12 @@ interface SidebarProps {
 
 const SIDEBAR_COLLAPSED_STORAGE_KEY = 'teamscope.sidebar.collapsed';
 const SIDEBAR_STATE_EVENT = 'teamscope-sidebar-state-change';
+const TEST_HARNESS_LABEL = 'Test Harness (BETA)';
+
+type PendingNavigation = {
+  href: string;
+  sourcePathname: string;
+};
 
 function subscribeSidebarState(onStoreChange: () => void) {
   if (typeof window === 'undefined') {
@@ -74,6 +92,7 @@ export function Sidebar({ navigationItems, version, role }: SidebarProps) {
   const [isChangelogOpen, setIsChangelogOpen] = useState(false);
   const [isPasskeyOpen, setIsPasskeyOpen] = useState(false);
   const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<PendingNavigation | null>(null);
 
   const toggleMobile = useCallback(() => {
     setIsMobileOpen((prev) => !prev);
@@ -93,6 +112,16 @@ export function Sidebar({ navigationItems, version, role }: SidebarProps) {
     };
   }, [isCollapsed]);
 
+  useEffect(() => {
+    if (!pendingNavigation || pendingNavigation.sourcePathname === pathname) return;
+
+    const timeout = window.setTimeout(() => {
+      setPendingNavigation(null);
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, [pathname, pendingNavigation]);
+
   const isActive = useCallback(
     (href: string) => {
       if (href === '/') return pathname === '/';
@@ -100,6 +129,27 @@ export function Sidebar({ navigationItems, version, role }: SidebarProps) {
       return pathname === href || pathname.startsWith(`${href}/`);
     },
     [pathname],
+  );
+
+  const handleNavigation = useCallback(
+    (event: MouseEvent<HTMLAnchorElement>, item: Pick<AppNavigationItem, 'href' | 'label'>) => {
+      const active = isActive(item.href);
+      if (active) {
+        setPendingNavigation(null);
+        closeMobile();
+        return;
+      }
+
+      if (pendingNavigation?.href === item.href && pendingNavigation.sourcePathname === pathname) {
+        event.preventDefault();
+        return;
+      }
+
+      setPendingNavigation({ href: item.href, sourcePathname: pathname });
+      start({ label: item.label, placement: 'center' });
+      closeMobile();
+    },
+    [closeMobile, isActive, pathname, pendingNavigation, start],
   );
 
   return (
@@ -128,7 +178,12 @@ export function Sidebar({ navigationItems, version, role }: SidebarProps) {
         )}
       >
         {/* 로고 영역 */}
-        <div className={cn('flex h-16 shrink-0 items-center border-b', isCollapsed ? 'justify-center px-3' : 'gap-2.5 px-5')}>
+        <div
+          className={cn(
+            'flex h-16 shrink-0 items-center border-b',
+            isCollapsed ? 'justify-center px-3' : 'gap-2.5 px-5',
+          )}
+        >
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--primary)] text-sm font-bold text-[var(--primary-foreground)]">
             T
           </div>
@@ -144,10 +199,7 @@ export function Sidebar({ navigationItems, version, role }: SidebarProps) {
               <Link
                 key={item.href}
                 href={item.href}
-                onClick={() => {
-                  if (!active) start();
-                  closeMobile();
-                }}
+                onClick={(event) => handleNavigation(event, item)}
                 title={isCollapsed ? item.label : undefined}
                 className={cn(
                   'flex rounded-lg text-sm font-medium transition-colors',
@@ -164,24 +216,39 @@ export function Sidebar({ navigationItems, version, role }: SidebarProps) {
           })}
 
           {role === 'owner' ? (
-            <Link
-              href="/guide/flow-lab"
-              onClick={() => {
-                if (!isActive('/guide/flow-lab')) start();
-                closeMobile();
-              }}
-              title={isCollapsed ? 'Test Harness' : undefined}
-              className={cn(
-                'mt-1 flex rounded-lg text-sm font-medium transition-colors',
-                isCollapsed ? 'justify-center px-2 py-3' : 'items-center gap-3 px-3 py-2.5',
-                isActive('/guide/flow-lab')
-                  ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
-                  : 'text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]',
-              )}
-            >
-              <Activity className="h-4.5 w-4.5 shrink-0" />
-              {!isCollapsed ? 'Test Harness' : null}
-            </Link>
+            <div className="pt-2">
+              <div className={cn('mb-2 border-t border-[var(--border)]', isCollapsed ? 'mx-2' : 'mx-3')} />
+              <Link
+                href="/guide/flow-lab"
+                onClick={(event) => handleNavigation(event, { href: '/guide/flow-lab', label: TEST_HARNESS_LABEL })}
+                title={isCollapsed ? TEST_HARNESS_LABEL : undefined}
+                aria-label={TEST_HARNESS_LABEL}
+                className={cn(
+                  'flex rounded-lg text-sm font-medium transition-colors',
+                  isCollapsed ? 'justify-center px-2 py-3' : 'items-center gap-3 px-3 py-2.5',
+                  isActive('/guide/flow-lab')
+                    ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
+                    : 'text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]',
+                )}
+              >
+                <Activity className="h-4.5 w-4.5 shrink-0" />
+                {!isCollapsed ? (
+                  <>
+                    <span className="min-w-0 flex-1 truncate">Test Harness</span>
+                    <span
+                      className={cn(
+                        'rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-none tracking-[0.12em]',
+                        isActive('/guide/flow-lab')
+                          ? 'border-[var(--primary-foreground)]/30 text-[var(--primary-foreground)]/90'
+                          : 'border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)]',
+                      )}
+                    >
+                      BETA
+                    </span>
+                  </>
+                ) : null}
+              </Link>
+            </div>
           ) : null}
         </nav>
 
@@ -235,7 +302,9 @@ export function Sidebar({ navigationItems, version, role }: SidebarProps) {
               className="inline-flex items-center gap-1.5 text-xs text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
             >
               <span>FE Team Scope v{version}</span>
-              <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]/80">by TAEINN</span>
+              <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--muted-foreground)]/80">
+                by TAEINN
+              </span>
             </button>
           ) : null}
         </div>

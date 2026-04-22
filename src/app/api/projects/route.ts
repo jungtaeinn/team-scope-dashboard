@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiContext } from '@/lib/auth/api';
 import { prisma } from '@/lib/db';
+import { refreshDashboardMonthlySummaryView } from '@/lib/db/dashboard-monthly-summary';
+import { cleanupProjectData } from '@/lib/projects/cleanup-project-data';
 import { ensureEnvProjects } from '@/lib/projects/ensure-env-projects';
 import { normalizeGitlabProjectBaseUrl } from '@/lib/gitlab/url';
 
@@ -72,10 +74,7 @@ export async function POST(request: NextRequest) {
     const workspaceId = authResult.context.workspace.id;
 
     if (!body.name?.trim()) {
-      return NextResponse.json(
-        { success: false, data: null, error: '프로젝트 이름은 필수입니다.' },
-        { status: 400 },
-      );
+      return NextResponse.json({ success: false, data: null, error: '프로젝트 이름은 필수입니다.' }, { status: 400 });
     }
 
     if (!body.type || !['jira', 'gitlab'].includes(body.type)) {
@@ -86,16 +85,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (!body.baseUrl?.trim()) {
-      return NextResponse.json(
-        { success: false, data: null, error: 'URL은 필수입니다.' },
-        { status: 400 },
-      );
+      return NextResponse.json({ success: false, data: null, error: 'URL은 필수입니다.' }, { status: 400 });
     }
 
     const normalizedBaseUrl =
-      body.type === 'gitlab'
-        ? normalizeGitlabProjectBaseUrl(body.baseUrl, body.projectKey)
-        : body.baseUrl.trim();
+      body.type === 'gitlab' ? normalizeGitlabProjectBaseUrl(body.baseUrl, body.projectKey) : body.baseUrl.trim();
 
     let project;
 
@@ -192,31 +186,39 @@ export async function DELETE(request: NextRequest) {
     const id = searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json(
-        { success: false, data: null, error: '프로젝트 ID가 필요합니다.' },
-        { status: 400 },
-      );
+      return NextResponse.json({ success: false, data: null, error: '프로젝트 ID가 필요합니다.' }, { status: 400 });
     }
 
     const existing = await prisma.project.findFirst({
       where: { id, workspaceId: authResult.context.workspace.id },
-      select: { id: true },
+      select: { id: true, name: true },
     });
 
     if (!existing) {
-      return NextResponse.json(
-        { success: false, data: null, error: '프로젝트를 찾을 수 없습니다.' },
-        { status: 404 },
-      );
+      return NextResponse.json({ success: false, data: null, error: '프로젝트를 찾을 수 없습니다.' }, { status: 404 });
     }
 
-    const project = await prisma.project.update({
-      where: { id },
-      data: { isActive: false },
-      select: { id: true, name: true, isActive: true },
+    const { project, cleanup } = await prisma.$transaction(async (tx) => {
+      const cleanupResult = await cleanupProjectData({
+        workspaceId: authResult.context.workspace.id,
+        projectIds: [id],
+        client: tx,
+      });
+
+      const deletedProject = await tx.project.update({
+        where: { id },
+        data: { isActive: false },
+        select: { id: true, name: true, isActive: true },
+      });
+
+      return { project: deletedProject, cleanup: cleanupResult };
     });
 
-    return NextResponse.json({ success: true, data: project, error: null });
+    if (cleanup.scoreCount > 0) {
+      await refreshDashboardMonthlySummaryView();
+    }
+
+    return NextResponse.json({ success: true, data: { ...project, cleanup }, error: null });
   } catch (error) {
     console.error('[Projects] 삭제 실패:', error);
     return NextResponse.json(

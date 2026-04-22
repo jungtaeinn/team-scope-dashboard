@@ -40,14 +40,11 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const { id } = await params;
     if (!id) {
-      return NextResponse.json(
-        { success: false, data: null, error: '개발자 ID가 필요합니다.' },
-        { status: 400 },
-      );
+      return NextResponse.json({ success: false, data: null, error: '개발자 ID가 필요합니다.' }, { status: 400 });
     }
 
     const issues = await prisma.jiraIssue.findMany({
-      where: { workspaceId: authResult.context.workspace.id, assigneeId: id },
+      where: { workspaceId: authResult.context.workspace.id, assigneeId: id, project: { isActive: true } },
       select: {
         ganttStartDate: true,
         ganttStartOn: true,
@@ -73,7 +70,9 @@ export async function GET(request: Request, { params }: RouteParams) {
       const planned = hasEffortData ? (issue.plannedEffort ?? 0) : 1;
       const actual = hasEffortData
         ? (issue.actualEffort ?? 0)
-        : (DONE_STATUSES.includes((issue.status ?? '').toLowerCase()) ? 1 : 0);
+        : DONE_STATUSES.includes((issue.status ?? '').toLowerCase())
+          ? 1
+          : 0;
       monthMap.set(monthKey, { planned: prev.planned + planned, actual: prev.actual + actual });
     }
 

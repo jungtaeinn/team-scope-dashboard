@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { MemberMappingSections } from './MemberMappingForm';
 import {
   Plus,
   Save,
@@ -41,6 +42,7 @@ interface ApiResponse<T> {
 }
 
 type TestStatus = 'idle' | 'testing' | 'success' | 'fail';
+type ProjectActionNotice = { tone: 'success' | 'error'; message: string };
 
 const EMPTY_FORM: ProjectFormData = {
   name: '',
@@ -80,6 +82,8 @@ export function ProjectManagementForm() {
   const [isSaving, setIsSaving] = useState(false);
   const [rowTestStatus, setRowTestStatus] = useState<Record<string, TestStatus>>({});
   const [rowTestMessage, setRowTestMessage] = useState<Record<string, string>>({});
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+  const [projectActionNotice, setProjectActionNotice] = useState<ProjectActionNotice | null>(null);
 
   const loadProjects = useCallback(async () => {
     setIsLoading(true);
@@ -101,6 +105,7 @@ export function ProjectManagementForm() {
   }, [loadProjects]);
 
   const handleOpenAdd = useCallback(() => {
+    setProjectActionNotice(null);
     setEditingId(null);
     setForm(EMPTY_FORM);
     setTestStatus('idle');
@@ -109,6 +114,7 @@ export function ProjectManagementForm() {
   }, []);
 
   const handleStartEdit = useCallback((project: ProjectConfig) => {
+    setProjectActionNotice(null);
     setEditingId(project.id);
     setForm({
       name: project.name,
@@ -161,6 +167,7 @@ export function ProjectManagementForm() {
   const handleSave = useCallback(async () => {
     if (!form.name.trim() || !form.baseUrl.trim()) return;
     setIsSaving(true);
+    setProjectActionNotice(null);
     try {
       const res = await fetch('/api/projects', {
         method: 'POST',
@@ -178,22 +185,66 @@ export function ProjectManagementForm() {
       if (data.success) {
         await loadProjects();
         handleCloseForm();
+        setProjectActionNotice({ tone: 'success', message: '프로젝트 연결 정보를 저장했습니다.' });
+      } else {
+        throw new Error(data.error ?? '프로젝트 저장 중 오류가 발생했습니다.');
       }
     } catch (error) {
       console.error('프로젝트 저장 실패:', error);
+      setProjectActionNotice({
+        tone: 'error',
+        message: error instanceof Error ? error.message : '프로젝트 저장 중 오류가 발생했습니다.',
+      });
     } finally {
       setIsSaving(false);
     }
   }, [editingId, form, handleCloseForm, loadProjects]);
 
-  const handleDelete = useCallback(async (id: string) => {
-    try {
-      await fetch(`/api/projects?id=${id}`, { method: 'DELETE' });
-      await loadProjects();
-    } catch (error) {
-      console.error('프로젝트 삭제 실패:', error);
-    }
-  }, [loadProjects]);
+  const handleDelete = useCallback(
+    async (project: ProjectConfig) => {
+      setDeletingProjectId(project.id);
+      setProjectActionNotice(null);
+      try {
+        const response = await fetch(`/api/projects?id=${project.id}`, { method: 'DELETE' });
+        const json = (await response.json().catch(() => null)) as ApiResponse<{
+          id: string;
+          name: string;
+          isActive: boolean;
+          cleanup?: {
+            jiraIssueCount: number;
+            gitlabMrCount: number;
+            gitlabNoteCount: number;
+            projectDeveloperCount: number;
+            scoreCount: number;
+          };
+        }> | null;
+        if (!response.ok || !json?.success) {
+          throw new Error(json?.error ?? '프로젝트 제거 중 오류가 발생했습니다.');
+        }
+        await loadProjects();
+        const cleanup = json.data?.cleanup;
+        const cleanedSnapshotCount = cleanup
+          ? cleanup.jiraIssueCount + cleanup.gitlabMrCount + cleanup.gitlabNoteCount
+          : 0;
+        setProjectActionNotice({
+          tone: 'success',
+          message:
+            cleanedSnapshotCount > 0
+              ? `${project.name} 프로젝트를 제거하고 연결된 스냅샷 ${cleanedSnapshotCount}건을 정리했습니다.`
+              : `${project.name} 프로젝트를 제거했습니다. 연결된 스냅샷은 남아있지 않습니다.`,
+        });
+      } catch (error) {
+        console.error('프로젝트 삭제 실패:', error);
+        setProjectActionNotice({
+          tone: 'error',
+          message: error instanceof Error ? error.message : '프로젝트 제거 중 오류가 발생했습니다.',
+        });
+      } finally {
+        setDeletingProjectId(null);
+      }
+    },
+    [loadProjects],
+  );
 
   const handleTestStoredConnection = useCallback(async (project: ProjectConfig) => {
     setRowTestStatus((prev) => ({ ...prev, [project.id]: 'testing' }));
@@ -220,225 +271,303 @@ export function ProjectManagementForm() {
     }
   }, []);
 
+  const isProjectFormSaveDisabled =
+    isSaving || !form.name.trim() || !form.baseUrl.trim() || (!editingId && !form.token.trim());
+  const projectFormSaveLabel = editingId ? '변경사항 저장' : '새 프로젝트 저장';
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">프로젝트 관리</h3>
-        <button
-          type="button"
-          onClick={handleOpenAdd}
-          className={cn(
-            'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium',
-            'bg-blue-600 text-white hover:bg-blue-700 transition-colors',
-          )}
-        >
-          <Plus className="h-4 w-4" />
-          프로젝트 추가
-        </button>
-      </div>
-
-      <div
-        className={cn(
-          'overflow-hidden transition-all duration-300 ease-in-out',
-          isFormOpen ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0',
-        )}
-      >
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">
-          <div className="mb-4 flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">{editingId ? '프로젝트 편집' : '새 프로젝트'}</h4>
-            <button type="button" onClick={handleCloseForm} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">이름</label>
-              <input
-                type="text"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="프로젝트 이름"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">유형</label>
-              <div className="relative">
-                <select
-                  value={form.type}
-                  onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as 'jira' | 'gitlab' }))}
-                  className="w-full appearance-none rounded-lg border border-gray-300 px-3 py-2 pr-8 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+    <div className="space-y-8">
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">프로젝트 관리</h3>
+          <div className="flex items-center gap-2">
+            {isFormOpen ? (
+              <>
+                <button
+                  type="button"
+                  onClick={handleCloseForm}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-medium',
+                    'text-muted-foreground transition-colors hover:bg-accent hover:text-foreground',
+                  )}
                 >
-                  <option value="jira">Jira</option>
-                  <option value="gitlab">GitLab</option>
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              </div>
-            </div>
-            <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">URL</label>
-              <input
-                type="url"
-                value={form.baseUrl}
-                onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))}
-                placeholder={form.type === 'jira' ? 'https://jira.example.com' : 'https://gitlab.example.com/group/project'}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-              />
-              {form.type === 'gitlab' ? (
-                <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-                  GitLab은 프로젝트 URL 또는 그룹 URL을 지원합니다. 예: `https://gitlab.example.com/group/project`, `https://gitlab.example.com/groups/team-group`
-                </p>
-              ) : null}
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">토큰</label>
-              <input
-                type="password"
-                value={form.token}
-                onChange={(e) => setForm((f) => ({ ...f, token: e.target.value }))}
-                placeholder={editingId ? '변경하려면 입력' : 'Personal Access Token'}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">프로젝트 키</label>
-              <input
-                type="text"
-                value={form.projectKey}
-                onChange={(e) => setForm((f) => ({ ...f, projectKey: e.target.value }))}
-                placeholder={form.type === 'jira' ? 'APM' : 'group/project, group-path 또는 numeric id'}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-              />
-            </div>
-          </div>
-
-          {testStatus !== 'idle' && testStatus !== 'testing' && (
-            <div
-              className={cn(
-                'mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm',
-                testStatus === 'success' && 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400',
-                testStatus === 'fail' && 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400',
-              )}
-            >
-              {testStatus === 'success' && <CheckCircle2 className="h-4 w-4" />}
-              {testStatus === 'fail' && <XCircle className="h-4 w-4" />}
-              {testMessage}
-            </div>
-          )}
-
-          <div className="mt-4 flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleTestConnection}
-              disabled={!form.baseUrl || !form.token || testStatus === 'testing'}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium',
-                'text-gray-700 hover:bg-gray-100 transition-colors dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700',
-                'disabled:opacity-50 disabled:cursor-not-allowed',
-              )}
-            >
-              {testStatus === 'testing' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ExternalLink className="h-4 w-4" />}
-              {testStatus === 'testing' ? '연결 확인 중' : '연결 테스트'}
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={isSaving || !form.name.trim()}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium',
-                'bg-blue-600 text-white hover:bg-blue-700 transition-colors',
-                'disabled:opacity-50 disabled:cursor-not-allowed',
-              )}
-            >
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              저장
-            </button>
+                  <X className="h-4 w-4" />
+                  취소
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={isProjectFormSaveDisabled}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium',
+                    'bg-blue-600 text-white transition-colors hover:bg-blue-700',
+                    'disabled:cursor-not-allowed disabled:opacity-50',
+                  )}
+                >
+                  {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {projectFormSaveLabel}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={handleOpenAdd}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium',
+                  'bg-blue-600 text-white hover:bg-blue-700 transition-colors',
+                )}
+              >
+                <Plus className="h-4 w-4" />
+                프로젝트 추가
+              </button>
+            )}
           </div>
         </div>
-      </div>
 
-      <div className="space-y-2">
-        {isLoading ? (
-          <div className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">프로젝트를 불러오는 중입니다...</div>
-        ) : (
-          projects.map((project) => (
-            <div
-              key={project.id}
-              className={cn(
-                'rounded-lg border p-4 transition-colors',
-                project.isActive
-                  ? 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900'
-                  : 'border-gray-100 bg-gray-50 opacity-60 dark:border-gray-800 dark:bg-gray-900/50',
-              )}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <TypeBadge type={project.type} />
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{project.name}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {project.baseUrl} · {project.projectKey}
-                    </p>
-                    {rowTestStatus[project.id] && rowTestStatus[project.id] !== 'idle' && rowTestStatus[project.id] !== 'testing' ? (
-                      <div
-                        className={cn(
-                          'mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px]',
-                          rowTestStatus[project.id] === 'success' && 'bg-green-500/10 text-green-400',
-                          rowTestStatus[project.id] === 'fail' && 'bg-red-500/10 text-red-400',
-                        )}
-                      >
-                        {rowTestStatus[project.id] === 'success' ? (
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                        ) : (
-                          <XCircle className="h-3.5 w-3.5" />
-                        )}
-                        <span>{rowTestMessage[project.id]}</span>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => handleTestStoredConnection(project)}
-                    disabled={rowTestStatus[project.id] === 'testing'}
-                    className="rounded p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-gray-800"
-                    title="연결 테스트"
-                    aria-label={`${project.name} 연결 테스트`}
+        <div
+          className={cn(
+            'overflow-hidden transition-all duration-300 ease-in-out',
+            isFormOpen ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0',
+          )}
+        >
+          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-800/50">
+            <div className="mb-4 flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                {editingId ? '프로젝트 편집' : '새 프로젝트'}
+              </h4>
+              <button
+                type="button"
+                onClick={handleCloseForm}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">이름</label>
+                <input
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="프로젝트 이름"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">유형</label>
+                <div className="relative">
+                  <select
+                    value={form.type}
+                    onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as 'jira' | 'gitlab' }))}
+                    className="w-full appearance-none rounded-lg border border-gray-300 px-3 py-2 pr-8 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                   >
-                    {rowTestStatus[project.id] === 'testing' ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlugZap className="h-4 w-4" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleStartEdit(project)}
-                    className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-blue-600 dark:hover:bg-gray-800"
-                    title="수정"
-                    aria-label={`${project.name} 수정`}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(project.id)}
-                    className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600 dark:hover:bg-gray-800"
-                    title="삭제"
-                    aria-label={`${project.name} 삭제`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                    <option value="jira">Jira</option>
+                    <option value="gitlab">GitLab</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 </div>
               </div>
+              <div className="sm:col-span-2">
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">URL</label>
+                <input
+                  type="url"
+                  value={form.baseUrl}
+                  onChange={(e) => setForm((f) => ({ ...f, baseUrl: e.target.value }))}
+                  placeholder={
+                    form.type === 'jira' ? 'https://jira.example.com' : 'https://gitlab.example.com/group/project'
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                />
+                {form.type === 'gitlab' ? (
+                  <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
+                    GitLab은 프로젝트 URL 또는 그룹 URL을 지원합니다. 예: `https://gitlab.example.com/group/project`,
+                    `https://gitlab.example.com/groups/team-group`
+                  </p>
+                ) : null}
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">토큰</label>
+                <input
+                  type="password"
+                  value={form.token}
+                  onChange={(e) => setForm((f) => ({ ...f, token: e.target.value }))}
+                  placeholder={editingId ? '변경하려면 입력' : 'Personal Access Token'}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">프로젝트 키</label>
+                <input
+                  type="text"
+                  value={form.projectKey}
+                  onChange={(e) => setForm((f) => ({ ...f, projectKey: e.target.value }))}
+                  placeholder={form.type === 'jira' ? 'APM' : 'group/project, group-path 또는 numeric id'}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                />
+              </div>
             </div>
-          ))
-        )}
 
-        {!isLoading && projects.length === 0 && (
-          <div className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
-            등록된 프로젝트가 없습니다. 위의 &ldquo;프로젝트 추가&rdquo; 버튼을 클릭하세요.
+            {testStatus !== 'idle' && testStatus !== 'testing' && (
+              <div
+                className={cn(
+                  'mt-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm',
+                  testStatus === 'success' && 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400',
+                  testStatus === 'fail' && 'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400',
+                )}
+              >
+                {testStatus === 'success' && <CheckCircle2 className="h-4 w-4" />}
+                {testStatus === 'fail' && <XCircle className="h-4 w-4" />}
+                {testMessage}
+              </div>
+            )}
+
+            <div className="mt-4 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={!form.baseUrl || !form.token || testStatus === 'testing'}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium',
+                  'text-gray-700 hover:bg-gray-100 transition-colors dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                )}
+              >
+                {testStatus === 'testing' ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ExternalLink className="h-4 w-4" />
+                )}
+                {testStatus === 'testing' ? '연결 확인 중' : '연결 테스트'}
+              </button>
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={isProjectFormSaveDisabled}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium',
+                  'bg-blue-600 text-white hover:bg-blue-700 transition-colors',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                )}
+              >
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                {projectFormSaveLabel}
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+
+        {projectActionNotice ? (
+          <div
+            className={cn(
+              'rounded-lg border px-3 py-2 text-sm',
+              projectActionNotice.tone === 'error'
+                ? 'border-red-500/25 bg-red-500/10 text-red-300'
+                : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300',
+            )}
+          >
+            {projectActionNotice.message}
+          </div>
+        ) : null}
+
+        <div className="space-y-2">
+          {isLoading ? (
+            <div className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+              프로젝트를 불러오는 중입니다...
+            </div>
+          ) : (
+            projects.map((project) => (
+              <div
+                key={project.id}
+                className={cn(
+                  'rounded-lg border p-4 transition-colors',
+                  project.isActive
+                    ? 'border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900'
+                    : 'border-gray-100 bg-gray-50 opacity-60 dark:border-gray-800 dark:bg-gray-900/50',
+                )}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <TypeBadge type={project.type} />
+                    <div>
+                      <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{project.name}</p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        {project.baseUrl} · {project.projectKey}
+                      </p>
+                      {rowTestStatus[project.id] &&
+                      rowTestStatus[project.id] !== 'idle' &&
+                      rowTestStatus[project.id] !== 'testing' ? (
+                        <div
+                          className={cn(
+                            'mt-2 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px]',
+                            rowTestStatus[project.id] === 'success' && 'bg-green-500/10 text-green-400',
+                            rowTestStatus[project.id] === 'fail' && 'bg-red-500/10 text-red-400',
+                          )}
+                        >
+                          {rowTestStatus[project.id] === 'success' ? (
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          ) : (
+                            <XCircle className="h-3.5 w-3.5" />
+                          )}
+                          <span>{rowTestMessage[project.id]}</span>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => handleTestStoredConnection(project)}
+                      disabled={rowTestStatus[project.id] === 'testing'}
+                      className="rounded p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-gray-800"
+                      title="연결 테스트"
+                      aria-label={`${project.name} 연결 테스트`}
+                    >
+                      {rowTestStatus[project.id] === 'testing' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <PlugZap className="h-4 w-4" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleStartEdit(project)}
+                      className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-blue-600 dark:hover:bg-gray-800"
+                      title="수정"
+                      aria-label={`${project.name} 수정`}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleDelete(project)}
+                      disabled={deletingProjectId === project.id}
+                      className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-red-600 dark:hover:bg-gray-800"
+                      title="삭제"
+                      aria-label={`${project.name} 삭제`}
+                    >
+                      {deletingProjectId === project.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+
+          {!isLoading && projects.length === 0 && (
+            <div className="py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+              등록된 프로젝트가 없습니다. 위의 &ldquo;프로젝트 추가&rdquo; 버튼을 클릭하세요.
+            </div>
+          )}
+        </div>
+      </section>
+
+      <MemberMappingSections />
     </div>
   );
 }

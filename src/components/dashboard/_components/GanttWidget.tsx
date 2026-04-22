@@ -18,11 +18,7 @@ interface ApiResponse<T> {
   error: string | null;
 }
 
-function SelectField({
-  className,
-  children,
-  ...props
-}: React.SelectHTMLAttributes<HTMLSelectElement>) {
+function SelectField({ className, children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <div className="relative">
       <select
@@ -44,8 +40,16 @@ export function GanttWidget() {
   const [jiraProjects, setJiraProjects] = useState<ProjectOption[]>([]);
   const [selectedJiraProjectId, setSelectedJiraProjectId] = useState<'all' | string>('all');
   const [isLoadingProjects, setIsLoadingProjects] = useState(true);
+  const [canLoadGantt, setCanLoadGantt] = useState(false);
 
   useEffect(() => {
+    const timeout = window.setTimeout(() => setCanLoadGantt(true), 800);
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    if (!canLoadGantt) return;
+
     let isMounted = true;
 
     fetch('/api/projects')
@@ -67,13 +71,14 @@ export function GanttWidget() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [canLoadGantt]);
 
   const { data: rawGanttData, isLoading: isLoadingGantt } = useGanttData({
     developerIds: developers.length ? developers : undefined,
     projectIds: selectedJiraProjectId !== 'all' ? [selectedJiraProjectId] : undefined,
     from: period.from,
     to: period.to,
+    enabled: canLoadGantt,
   });
 
   const ganttData = useMemo(() => {
@@ -84,7 +89,7 @@ export function GanttWidget() {
     return rawGanttData.filter((developer) => developer.developerName.toLowerCase().includes(keyword));
   }, [rawGanttData, search]);
 
-  const isLoading = isLoadingProjects || isLoadingGantt;
+  const isLoading = !canLoadGantt || isLoadingProjects || isLoadingGantt;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">

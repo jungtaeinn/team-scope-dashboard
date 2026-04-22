@@ -2,7 +2,7 @@
   "name": "team-scope-dashboard",
   "description": "An interactive engineering dashboard that syncs Jira and GitLab data, scores developer and team performance, visualizes Gantt workload, trends, and rankings with filters, and exports Excel reports.",
   "author": "jungtaeinn",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "license": "Apache-2.0",
   "private": true,
   "packageManager": "pnpm@10.21.0",

@@ -1,8 +1,32 @@
 'use client';
 
-import { useState, useCallback, useEffect, useMemo, type SelectHTMLAttributes } from 'react';
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type KeyboardEvent,
+  type SelectHTMLAttributes,
+} from 'react';
 import { cn } from '@/lib/utils';
-import { Pencil, Trash2, Plus, Save, X, Loader2, BadgeCheck, Link2, CheckCheck, Sparkles, Search, ChevronDown } from 'lucide-react';
+import {
+  Pencil,
+  Trash2,
+  Plus,
+  Save,
+  X,
+  Check,
+  Loader2,
+  BadgeCheck,
+  Link2,
+  CheckCheck,
+  Sparkles,
+  Search,
+  ChevronDown,
+  ChevronsLeft,
+  ChevronsRight,
+} from 'lucide-react';
 import { WorkspaceAccessForm } from './WorkspaceAccessForm';
 
 interface DeveloperMapping {
@@ -63,6 +87,11 @@ interface ProjectMemberNotice {
   message: string;
 }
 
+interface SaveNotice {
+  tone: 'error' | 'success';
+  message: string;
+}
+
 const EMPTY_FORM: DeveloperFormData = {
   name: '',
   jiraUsername: '',
@@ -70,6 +99,7 @@ const EMPTY_FORM: DeveloperFormData = {
   groupId: '',
   isActive: true,
 };
+const PROJECT_CANDIDATE_PAGE_SIZE = 10;
 
 interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement> {
   dense?: boolean;
@@ -99,11 +129,151 @@ function SelectField({ className, children, dense = false, ...props }: SelectFie
   );
 }
 
+interface ProjectSelectProps {
+  value: string;
+  projects: ProjectOption[];
+  onValueChange: (value: string) => void;
+}
+
+function ProjectSelect({ value, projects, onValueChange }: ProjectSelectProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selectedProject = projects.find((project) => project.id === value);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    const handleEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleEscape);
+
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [isOpen]);
+
+  const handleSelect = useCallback(
+    (nextValue: string) => {
+      onValueChange(nextValue);
+      setIsOpen(false);
+    },
+    [onValueChange],
+  );
+
+  const handleButtonKeyDown = useCallback((event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      setIsOpen(true);
+    }
+  }, []);
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        role="combobox"
+        aria-expanded={isOpen}
+        aria-controls="project-member-select-listbox"
+        onClick={() => setIsOpen((open) => !open)}
+        onKeyDown={handleButtonKeyDown}
+        className={cn(
+          'flex h-10 w-full items-center justify-between gap-3 rounded-lg border border-border bg-[var(--card)] px-3 text-left text-sm text-[var(--foreground)] shadow-sm transition-colors',
+          'hover:bg-[var(--accent)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]',
+        )}
+      >
+        <span className={cn('truncate', !selectedProject && 'text-muted-foreground')}>
+          {selectedProject
+            ? `${selectedProject.name} (${selectedProject.type === 'jira' ? 'Jira' : 'GitLab'})`
+            : '프로젝트 선택'}
+        </span>
+        <ChevronDown
+          className={cn(
+            'h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+            isOpen && 'rotate-180 text-[var(--foreground)]',
+          )}
+        />
+      </button>
+
+      {isOpen ? (
+        <div
+          id="project-member-select-listbox"
+          role="listbox"
+          className={cn(
+            'absolute left-0 right-0 top-full z-30 mt-2 max-h-72 overflow-y-auto rounded-lg border border-border bg-[var(--popover)] p-1.5 text-sm text-[var(--popover-foreground)] shadow-xl',
+            'ring-1 ring-black/5 dark:ring-white/10',
+          )}
+        >
+          <button
+            type="button"
+            role="option"
+            aria-selected={!value}
+            onClick={() => handleSelect('')}
+            className={cn(
+              'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors',
+              !value
+                ? 'bg-[var(--accent)] text-[var(--accent-foreground)]'
+                : 'text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]',
+            )}
+          >
+            <Check className={cn('h-4 w-4 shrink-0', value ? 'opacity-0' : 'opacity-100')} />
+            <span className="truncate">프로젝트 선택</span>
+          </button>
+
+          {projects.map((project) => {
+            const isSelected = project.id === value;
+            return (
+              <button
+                key={project.id}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                onClick={() => handleSelect(project.id)}
+                className={cn(
+                  'flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors',
+                  isSelected
+                    ? 'bg-[var(--accent)] text-[var(--accent-foreground)]'
+                    : 'text-[var(--foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]',
+                )}
+              >
+                <Check
+                  className={cn('h-4 w-4 shrink-0 text-[var(--primary)]', isSelected ? 'opacity-100' : 'opacity-0')}
+                />
+                <span className="min-w-0 flex-1 truncate">
+                  {project.name}
+                  <span className="ml-1 text-xs text-muted-foreground">
+                    ({project.type === 'jira' ? 'Jira' : 'GitLab'})
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+
+          {projects.length === 0 ? (
+            <div className="px-2.5 py-5 text-center text-sm text-muted-foreground">등록된 프로젝트가 없습니다.</div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 /**
  * 개발자-Jira/GitLab 사용자명 매핑 관리 폼.
  * DB 기반 데이터로 추가/편집/삭제 후 저장합니다.
  */
-export function MemberMappingForm() {
+export function MemberMappingSections() {
   const [developers, setDevelopers] = useState<DeveloperMapping[]>([]);
   const [groups, setGroups] = useState<GroupOption[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -119,23 +289,33 @@ export function MemberMappingForm() {
   const [isSavingProjectMembers, setIsSavingProjectMembers] = useState(false);
   const [hasLoadedProjectMembers, setHasLoadedProjectMembers] = useState(false);
   const [projectCandidateSearch, setProjectCandidateSearch] = useState('');
+  const [projectCandidatePage, setProjectCandidatePage] = useState(1);
   const [projectMemberNotice, setProjectMemberNotice] = useState<ProjectMemberNotice | null>(null);
+  const [saveNotice, setSaveNotice] = useState<SaveNotice | null>(null);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [devRes, groupRes, projectRes] = await Promise.all([fetch('/api/developers'), fetch('/api/groups'), fetch('/api/projects')]);
-      const devJson = (await devRes.json()) as ApiResponse<Array<{
-        id: string;
-        name: string;
-        jiraUsername?: string | null;
-        gitlabUsername?: string | null;
-        groupId?: string | null;
-        isActive: boolean;
-        group?: { id: string; name: string } | null;
-      }>>;
+      const [devRes, groupRes, projectRes] = await Promise.all([
+        fetch('/api/developers'),
+        fetch('/api/groups'),
+        fetch('/api/projects'),
+      ]);
+      const devJson = (await devRes.json()) as ApiResponse<
+        Array<{
+          id: string;
+          name: string;
+          jiraUsername?: string | null;
+          gitlabUsername?: string | null;
+          groupId?: string | null;
+          isActive: boolean;
+          group?: { id: string; name: string } | null;
+        }>
+      >;
       const groupJson = (await groupRes.json()) as ApiResponse<Array<{ id: string; name: string }>>;
-      const projectJson = (await projectRes.json()) as ApiResponse<Array<{ id: string; name: string; type: 'jira' | 'gitlab' }>>;
+      const projectJson = (await projectRes.json()) as ApiResponse<
+        Array<{ id: string; name: string; type: 'jira' | 'gitlab' }>
+      >;
 
       if (groupJson.success && groupJson.data) {
         setGroups(groupJson.data.map((g) => ({ id: g.id, name: g.name })));
@@ -170,6 +350,7 @@ export function MemberMappingForm() {
       setProjectCandidates([]);
       setHasLoadedProjectMembers(false);
       setProjectCandidateSearch('');
+      setProjectCandidatePage(1);
       setProjectMemberNotice(null);
       return;
     }
@@ -184,6 +365,7 @@ export function MemberMappingForm() {
       }
       setProjectCandidates(json.data.candidates);
       setProjectCandidateSearch('');
+      setProjectCandidatePage(1);
       setHasLoadedProjectMembers(true);
     } catch (error) {
       console.error('프로젝트 멤버 조회 실패:', error);
@@ -191,10 +373,7 @@ export function MemberMappingForm() {
       setHasLoadedProjectMembers(false);
       setProjectMemberNotice({
         tone: 'error',
-        message:
-          error instanceof Error
-            ? error.message
-            : '프로젝트 멤버 조회 중 오류가 발생했습니다.',
+        message: error instanceof Error ? error.message : '프로젝트 멤버 조회 중 오류가 발생했습니다.',
       });
     } finally {
       setIsLoadingProjectMembers(false);
@@ -262,6 +441,7 @@ export function MemberMappingForm() {
 
   const handleSaveAll = useCallback(async () => {
     setIsSaving(true);
+    setSaveNotice(null);
     try {
       for (const dev of developers) {
         const saveRes = await fetch('/api/developers', {
@@ -283,32 +463,41 @@ export function MemberMappingForm() {
         }
       }
 
-      const syncRes = await fetch('/api/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}',
-      });
-      const syncJson = (await syncRes.json().catch(() => null)) as SyncResponse | null;
-      if (!syncRes.ok || !syncJson?.success) {
-        throw new Error(syncJson?.message ?? '데이터 동기화 중 오류가 발생했습니다.');
+      let syncMessage = '';
+      if (selectedProjectId) {
+        const syncRes = await fetch('/api/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectId: selectedProjectId }),
+        });
+        const syncJson = (await syncRes.json().catch(() => null)) as SyncResponse | null;
+        if (!syncRes.ok || !syncJson?.success) {
+          throw new Error(syncJson?.message ?? '데이터 동기화 중 오류가 발생했습니다.');
+        }
+        syncMessage = syncJson.message ? ` ${syncJson.message}` : ' 선택한 프로젝트 동기화까지 완료했습니다.';
       }
 
       await loadData();
+      setSaveNotice({
+        tone: 'success',
+        message: selectedProjectId
+          ? `멤버 매핑을 저장했습니다.${syncMessage}`
+          : '멤버 매핑을 저장했습니다. 프로젝트를 선택하지 않아 전체 데이터 동기화는 실행하지 않았습니다.',
+      });
     } catch (error) {
       console.error('개발자 매핑 저장 실패:', error);
-      alert(error instanceof Error ? error.message : '개발자 매핑 저장/동기화 중 오류가 발생했습니다.');
+      setSaveNotice({
+        tone: 'error',
+        message: error instanceof Error ? error.message : '개발자 매핑 저장/동기화 중 오류가 발생했습니다.',
+      });
     } finally {
       setIsSaving(false);
     }
-  }, [developers, loadData]);
+  }, [developers, loadData, selectedProjectId]);
 
   const handleToggleProjectCandidate = useCallback((key: string) => {
     setProjectCandidates((prev) =>
-      prev.map((candidate) =>
-        candidate.key === key
-          ? { ...candidate, assigned: !candidate.assigned }
-          : candidate,
-      ),
+      prev.map((candidate) => (candidate.key === key ? { ...candidate, assigned: !candidate.assigned } : candidate)),
     );
   }, []);
 
@@ -341,10 +530,7 @@ export function MemberMappingForm() {
       console.error('프로젝트 멤버 저장 실패:', error);
       setProjectMemberNotice({
         tone: 'error',
-        message:
-          error instanceof Error
-            ? error.message
-            : '프로젝트 멤버 저장 중 오류가 발생했습니다.',
+        message: error instanceof Error ? error.message : '프로젝트 멤버 저장 중 오류가 발생했습니다.',
       });
     } finally {
       setIsSavingProjectMembers(false);
@@ -377,9 +563,49 @@ export function MemberMappingForm() {
         candidate.matchedDeveloperName,
       ];
 
-      return targets.some((value) => String(value ?? '').toLowerCase().includes(keyword));
+      return targets.some((value) =>
+        String(value ?? '')
+          .toLowerCase()
+          .includes(keyword),
+      );
     });
   }, [projectCandidateSearch, projectCandidates]);
+  const projectCandidatePageCount = Math.max(
+    1,
+    Math.ceil(filteredProjectCandidates.length / PROJECT_CANDIDATE_PAGE_SIZE),
+  );
+  const pagedProjectCandidates = useMemo(() => {
+    const startIndex = (projectCandidatePage - 1) * PROJECT_CANDIDATE_PAGE_SIZE;
+    return filteredProjectCandidates.slice(startIndex, startIndex + PROJECT_CANDIDATE_PAGE_SIZE);
+  }, [filteredProjectCandidates, projectCandidatePage]);
+  const projectCandidatePageStart =
+    filteredProjectCandidates.length === 0 ? 0 : (projectCandidatePage - 1) * PROJECT_CANDIDATE_PAGE_SIZE + 1;
+  const projectCandidatePageEnd = Math.min(
+    projectCandidatePage * PROJECT_CANDIDATE_PAGE_SIZE,
+    filteredProjectCandidates.length,
+  );
+  const projectCandidatePageItems = useMemo(() => {
+    if (projectCandidatePageCount <= 7) {
+      return Array.from({ length: projectCandidatePageCount }, (_, index) => index + 1);
+    }
+
+    const pages = new Set([1, projectCandidatePageCount]);
+    for (let page = projectCandidatePage - 1; page <= projectCandidatePage + 1; page += 1) {
+      if (page > 1 && page < projectCandidatePageCount) {
+        pages.add(page);
+      }
+    }
+
+    return [...pages].sort((a, b) => a - b);
+  }, [projectCandidatePage, projectCandidatePageCount]);
+
+  useEffect(() => {
+    setProjectCandidatePage((page) => Math.min(page, projectCandidatePageCount));
+  }, [projectCandidatePageCount]);
+
+  useEffect(() => {
+    setProjectCandidatePage(1);
+  }, [projectCandidateSearch]);
 
   const handleAssignAllProjectCandidates = useCallback(() => {
     setProjectCandidates((prev) => prev.map((candidate) => ({ ...candidate, assigned: true })));
@@ -399,14 +625,13 @@ export function MemberMappingForm() {
   }, []);
 
   return (
-    <div className="space-y-6">
-      <WorkspaceAccessForm />
-
+    <>
       <section className="space-y-4">
         <div className="space-y-1">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">프로젝트 기준 멤버 불러오기</h3>
           <p className="text-sm text-muted-foreground">
-            프로젝트를 선택하고 실제 등록 멤버를 조회한 뒤, 필요한 멤버만 선택해 저장하면 기존 멤버 매칭과 중복 정리까지 자동으로 처리됩니다.
+            프로젝트를 선택하고 실제 등록 멤버를 조회한 뒤, 필요한 멤버만 선택해 저장하면 기존 멤버 매칭과 중복 정리까지
+            자동으로 처리됩니다.
           </p>
         </div>
 
@@ -414,23 +639,18 @@ export function MemberMappingForm() {
           <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:gap-4 lg:pr-2">
             <div className="space-y-2">
               <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">프로젝트</label>
-              <SelectField
+              <ProjectSelect
                 value={selectedProjectId}
-                onChange={(e) => {
-                  setSelectedProjectId(e.target.value);
+                projects={projects}
+                onValueChange={(nextProjectId) => {
+                  setSelectedProjectId(nextProjectId);
                   setProjectCandidates([]);
                   setHasLoadedProjectMembers(false);
                   setProjectCandidateSearch('');
+                  setProjectCandidatePage(1);
                   setProjectMemberNotice(null);
                 }}
-              >
-                <option value="">프로젝트 선택</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name} ({project.type === 'jira' ? 'Jira' : 'GitLab'})
-                  </option>
-                ))}
-              </SelectField>
+              />
             </div>
 
             <button
@@ -469,14 +689,17 @@ export function MemberMappingForm() {
                     </span>
                   </div>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    조회된 멤버 중 필요한 인원만 선택해 저장하면, 기존 개발자 자동 연결과 중복 병합까지 함께 처리되어 프로젝트 기준 필터와 동기화 대상이 더 정확해집니다.
+                    조회된 멤버 중 필요한 인원만 선택해 저장하면, 기존 개발자 자동 연결과 중복 병합까지 함께 처리되어
+                    프로젝트 기준 필터와 동기화 대상이 더 정확해집니다.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2 text-xs sm:min-w-[320px]">
                   <div className="rounded-lg border border-border bg-[var(--card)] px-3 py-2">
                     <div className="text-[var(--muted-foreground)]">조회 멤버</div>
-                    <div className="mt-1 text-sm font-semibold text-[var(--foreground)]">{projectCandidates.length}명</div>
+                    <div className="mt-1 text-sm font-semibold text-[var(--foreground)]">
+                      {projectCandidates.length}명
+                    </div>
                   </div>
                   <div className="rounded-lg border border-border bg-[var(--card)] px-3 py-2">
                     <div className="text-[var(--muted-foreground)]">기존 매핑</div>
@@ -484,7 +707,9 @@ export function MemberMappingForm() {
                   </div>
                   <div className="rounded-lg border border-border bg-[var(--card)] px-3 py-2">
                     <div className="text-[var(--muted-foreground)]">선택됨</div>
-                    <div className="mt-1 text-sm font-semibold text-[var(--foreground)]">{selectedCandidateCount}명</div>
+                    <div className="mt-1 text-sm font-semibold text-[var(--foreground)]">
+                      {selectedCandidateCount}명
+                    </div>
                   </div>
                 </div>
               </div>
@@ -527,35 +752,35 @@ export function MemberMappingForm() {
                       />
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleAssignMatchedProjectCandidates}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-[var(--card)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--accent)]"
-                    >
-                      <BadgeCheck className="h-3.5 w-3.5" />
-                      기존 매핑만
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAssignAllProjectCandidates}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-[var(--card)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--accent)]"
-                    >
-                      <CheckCheck className="h-3.5 w-3.5" />
-                      전체 선택
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleClearProjectCandidates}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-[var(--card)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
-                    >
-                      초기화
-                    </button>
+                      <button
+                        type="button"
+                        onClick={handleAssignMatchedProjectCandidates}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-[var(--card)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--accent)]"
+                      >
+                        <BadgeCheck className="h-3.5 w-3.5" />
+                        기존 매핑만
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAssignAllProjectCandidates}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-[var(--card)] px-3 py-1.5 text-xs font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--accent)]"
+                      >
+                        <CheckCheck className="h-3.5 w-3.5" />
+                        전체 선택
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleClearProjectCandidates}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-[var(--card)] px-3 py-1.5 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+                      >
+                        초기화
+                      </button>
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3 p-3">
-                  {filteredProjectCandidates.map((candidate) => (
+                  {pagedProjectCandidates.map((candidate) => (
                     <label
                       key={candidate.key}
                       className={cn(
@@ -602,7 +827,8 @@ export function MemberMappingForm() {
                         </div>
                         {candidate.matchedDeveloperName ? (
                           <p className="mt-1 text-xs text-muted-foreground">
-                            <span className="text-emerald-400">{candidate.matchedDeveloperName}</span> 레코드에 연결됩니다.
+                            <span className="text-emerald-400">{candidate.matchedDeveloperName}</span> 레코드에
+                            연결됩니다.
                           </p>
                         ) : null}
                       </div>
@@ -610,7 +836,7 @@ export function MemberMappingForm() {
                       <div className="min-w-0">
                         <div className="text-[11px] font-medium text-muted-foreground">외부 식별자</div>
                         <div className="mt-1 flex flex-wrap gap-2">
-                          {(candidate.gitlabUsername || candidate.jiraUsername) ? (
+                          {candidate.gitlabUsername || candidate.jiraUsername ? (
                             <div className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-2.5 py-1.5 text-xs text-foreground">
                               <Link2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                               <span className="shrink-0 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -621,7 +847,9 @@ export function MemberMappingForm() {
                           ) : null}
                           {candidate.corporateIdentifier ? (
                             <div className="inline-flex items-center gap-1.5 rounded-lg border border-sky-500/20 bg-sky-500/10 px-2.5 py-1.5 text-xs text-sky-300">
-                              <span className="text-[10px] font-medium uppercase tracking-wide text-sky-300/80">AC/AP</span>
+                              <span className="text-[10px] font-medium uppercase tracking-wide text-sky-300/80">
+                                AC/AP
+                              </span>
                               <code>{candidate.corporateIdentifier}</code>
                             </div>
                           ) : null}
@@ -648,11 +876,63 @@ export function MemberMappingForm() {
                     </div>
                   ) : null}
                 </div>
+
+                {filteredProjectCandidates.length > PROJECT_CANDIDATE_PAGE_SIZE ? (
+                  <div className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-xs text-muted-foreground">
+                      {filteredProjectCandidates.length}명 중 {projectCandidatePageStart}-{projectCandidatePageEnd}명
+                      표시
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setProjectCandidatePage(1)}
+                        disabled={projectCandidatePage === 1}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-[var(--card)] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+                        aria-label="첫 페이지"
+                      >
+                        <ChevronsLeft className="h-3.5 w-3.5" />
+                      </button>
+                      {projectCandidatePageItems.map((page, index) => {
+                        const previousPage = projectCandidatePageItems[index - 1];
+                        const hasGap = typeof previousPage === 'number' && page - previousPage > 1;
+                        return (
+                          <div key={page} className="flex items-center gap-1.5">
+                            {hasGap ? <span className="px-1 text-xs text-muted-foreground">...</span> : null}
+                            <button
+                              type="button"
+                              onClick={() => setProjectCandidatePage(page)}
+                              aria-current={projectCandidatePage === page ? 'page' : undefined}
+                              className={cn(
+                                'inline-flex h-8 min-w-8 items-center justify-center rounded-lg border px-2 text-xs font-medium transition-colors',
+                                projectCandidatePage === page
+                                  ? 'border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]'
+                                  : 'border-border bg-[var(--card)] text-muted-foreground hover:bg-accent hover:text-foreground',
+                              )}
+                            >
+                              {page}
+                            </button>
+                          </div>
+                        );
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => setProjectCandidatePage(projectCandidatePageCount)}
+                        disabled={projectCandidatePage === projectCandidatePageCount}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-[var(--card)] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-45"
+                        aria-label="마지막 페이지"
+                      >
+                        <ChevronsRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
 
               <div className="flex flex-col gap-3 rounded-xl border border-border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">{selectedCandidateCount}명</span>을 저장 대상으로 선택했습니다.
+                  <span className="font-medium text-foreground">{selectedCandidateCount}명</span>을 저장 대상으로
+                  선택했습니다.
                   {!selectedCandidateCount && newCandidateCount > 0
                     ? ' 신규 생성 대상은 필요한 인원만 체크해서 저장해 주세요.'
                     : ' 저장 시 자동 매칭과 중복 정리가 함께 적용됩니다.'}
@@ -673,11 +953,14 @@ export function MemberMappingForm() {
             </div>
           )}
 
-          {hasLoadedProjectMembers && !isLoadingProjectMembers && selectedProjectId && projectCandidates.length === 0 && (
-            <p className="mt-4 text-sm text-muted-foreground">
-              조회된 프로젝트 멤버가 없습니다. 프로젝트 이슈/멤버 권한 또는 토큰 상태를 함께 확인해 주세요.
-            </p>
-          )}
+          {hasLoadedProjectMembers &&
+            !isLoadingProjectMembers &&
+            selectedProjectId &&
+            projectCandidates.length === 0 && (
+              <p className="mt-4 text-sm text-muted-foreground">
+                조회된 프로젝트 멤버가 없습니다. 프로젝트 이슈/멤버 권한 또는 토큰 상태를 함께 확인해 주세요.
+              </p>
+            )}
         </div>
       </section>
 
@@ -912,6 +1195,19 @@ export function MemberMappingForm() {
           </table>
         </div>
 
+        {saveNotice ? (
+          <div
+            className={cn(
+              'rounded-lg border px-3 py-2 text-sm',
+              saveNotice.tone === 'error'
+                ? 'border-red-500/25 bg-red-500/10 text-red-300'
+                : 'border-emerald-500/25 bg-emerald-500/10 text-emerald-300',
+            )}
+          >
+            {saveNotice.message}
+          </div>
+        ) : null}
+
         <div className="flex justify-end pr-1 sm:pr-2">
           <button
             type="button"
@@ -923,10 +1219,24 @@ export function MemberMappingForm() {
             )}
           >
             {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            {isSaving ? '저장 및 동기화 중...' : '저장 + 동기화'}
+            {isSaving
+              ? selectedProjectId
+                ? '저장 및 선택 프로젝트 동기화 중...'
+                : '매핑 저장 중...'
+              : selectedProjectId
+                ? '저장 + 선택 프로젝트 동기화'
+                : '매핑 저장'}
           </button>
         </div>
       </section>
+    </>
+  );
+}
+
+export function MemberMappingForm() {
+  return (
+    <div className="space-y-6">
+      <WorkspaceAccessForm />
     </div>
   );
 }

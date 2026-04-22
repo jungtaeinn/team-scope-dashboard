@@ -68,9 +68,7 @@ export async function GET(request: NextRequest) {
       createdScores = await calculateScoresOnDemand(workspaceId, period, recomputeDeveloperIds);
     }
 
-    const scoreMap = new Map(
-      [...existingScores, ...createdScores].map((score) => [score.developerId, score]),
-    );
+    const scoreMap = new Map([...existingScores, ...createdScores].map((score) => [score.developerId, score]));
 
     const scores = targetDeveloperIds
       .map((developerId) => scoreMap.get(developerId))
@@ -152,18 +150,13 @@ async function calculateScoresOnDemand(workspaceId: string, period: string, deve
       where: {
         workspaceId,
         assigneeId: { in: targetDeveloperIds },
+        project: { isActive: true },
         OR: [
           {
-            AND: [
-              { ganttStartOn: { lte: periodEnd } },
-              { ganttEndOn: { gte: periodStart } },
-            ],
+            AND: [{ ganttStartOn: { lte: periodEnd } }, { ganttEndOn: { gte: periodStart } }],
           },
           {
-            AND: [
-              { ganttStartOn: { lte: periodEnd } },
-              { dueOn: { gte: periodStart } },
-            ],
+            AND: [{ ganttStartOn: { lte: periodEnd } }, { dueOn: { gte: periodStart } }],
           },
           { ganttEndOn: { gte: periodStart, lte: periodEnd } },
           { dueOn: { gte: periodStart, lte: periodEnd } },
@@ -207,6 +200,7 @@ async function calculateScoresOnDemand(workspaceId: string, period: string, deve
       where: {
         workspaceId,
         authorId: { in: targetDeveloperIds },
+        project: { isActive: true },
         OR: [
           { mrCreatedAtTs: { gte: periodStart, lte: periodEnd } },
           { mrMergedAtTs: { gte: periodStart, lte: periodEnd } },
@@ -319,16 +313,18 @@ async function calculateScoresOnDemand(workspaceId: string, period: string, deve
       labels: [] as string[],
       isDraft: false,
       webUrl: '',
-      notes: mr.notes.map((note: any): ParsedNote => ({
-        id: note.mrId,
-        body: '',
-        authorUsername: '',
-        authorName: '',
-        createdAt: note.noteCreatedAtTs?.toISOString() ?? note.noteCreatedAt,
-        isReviewComment: !note.isSystem,
-        isResolvable: note.isResolvable,
-        isResolved: note.isResolved,
-      })),
+      notes: mr.notes.map(
+        (note: any): ParsedNote => ({
+          id: note.mrId,
+          body: '',
+          authorUsername: '',
+          authorName: '',
+          createdAt: note.noteCreatedAtTs?.toISOString() ?? note.noteCreatedAt,
+          isReviewComment: !note.isSystem,
+          isResolvable: note.isResolvable,
+          isResolved: note.isResolved,
+        }),
+      ),
     }));
 
     const jiraScore = calculateJiraScore(

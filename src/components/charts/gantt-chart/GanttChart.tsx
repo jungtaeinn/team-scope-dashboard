@@ -1,7 +1,17 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addDays, differenceInCalendarDays, format, isWeekend, parseISO, startOfWeek, endOfWeek, eachDayOfInterval, startOfDay } from 'date-fns';
+import {
+  addDays,
+  differenceInCalendarDays,
+  format,
+  isWeekend,
+  parseISO,
+  startOfWeek,
+  endOfWeek,
+  eachDayOfInterval,
+  startOfDay,
+} from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Calendar, AlertCircle, ArrowUpDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -21,12 +31,12 @@ const STATUS_TONES: Record<StatusToneKey, IssueTone[]> = {
     { bg: 'rgba(249, 115, 22, 0.9)', border: 'rgba(194, 65, 12, 0.98)', text: '#fff7ed' },
   ],
   closed: [
-    { bg: 'rgba(71, 85, 105, 0.82)', border: 'rgba(100, 116, 139, 0.98)', text: '#e2e8f0' },
-    { bg: 'rgba(67, 56, 202, 0.5)', border: 'rgba(129, 140, 248, 0.98)', text: '#e0e7ff' },
-    { bg: 'rgba(82, 82, 91, 0.84)', border: 'rgba(161, 161, 170, 0.98)', text: '#fafafa' },
-    { bg: 'rgba(30, 41, 59, 0.86)', border: 'rgba(125, 211, 252, 0.82)', text: '#e0f2fe' },
-    { bg: 'rgba(69, 26, 3, 0.72)', border: 'rgba(251, 146, 60, 0.88)', text: '#ffedd5' },
-    { bg: 'rgba(63, 63, 70, 0.84)', border: 'rgba(212, 212, 216, 0.92)', text: '#fafafa' },
+    { bg: 'rgba(100, 116, 139, 0.88)', border: 'rgba(148, 163, 184, 0.96)', text: '#f8fafc' },
+    { bg: 'rgba(92, 110, 134, 0.88)', border: 'rgba(148, 163, 184, 0.96)', text: '#f8fafc' },
+    { bg: 'rgba(107, 114, 128, 0.88)', border: 'rgba(156, 163, 175, 0.96)', text: '#f9fafb' },
+    { bg: 'rgba(82, 99, 122, 0.88)', border: 'rgba(125, 143, 168, 0.96)', text: '#f8fafc' },
+    { bg: 'rgba(112, 122, 137, 0.86)', border: 'rgba(163, 172, 185, 0.96)', text: '#f8fafc' },
+    { bg: 'rgba(91, 105, 125, 0.88)', border: 'rgba(139, 153, 174, 0.96)', text: '#f8fafc' },
   ],
   progress: [
     { bg: 'rgba(59, 130, 246, 0.92)', border: 'rgba(29, 78, 216, 0.98)', text: '#eff6ff' },
@@ -56,7 +66,15 @@ const STATUS_TONES: Record<StatusToneKey, IssueTone[]> = {
 
 const CLOSED_STATUSES = ['closed', '닫힘', '종료', 'resolved', '해결됨'];
 const DONE_STATUSES = ['done', '완료', 'complete', '해결'];
-const PROGRESS_STATUSES = ['in progress', '개발 진행중', '개발 분석중', '처리 중', 'in development', '개발 qa', '기능 qa'];
+const PROGRESS_STATUSES = [
+  'in progress',
+  '개발 진행중',
+  '개발 분석중',
+  '처리 중',
+  'in development',
+  '개발 qa',
+  '기능 qa',
+];
 const WAITING_STATUSES = ['open', 'to do', '개발 요청 전환', '개발 작업 대기', 'backlog'];
 
 function getStatusToneKey(status: string): StatusToneKey {
@@ -118,12 +136,7 @@ interface GanttChartProps {
  * 반응형 Gantt 차트 컴포넌트
  * @description 개발자별 Jira 이슈 일정을 시간축 기반으로 시각화
  */
-export function GanttChart({
-  data,
-  className,
-  singleDeveloper = false,
-  projectColorMode = 'status',
-}: GanttChartProps) {
+export function GanttChart({ data, className, singleDeveloper = false, projectColorMode = 'status' }: GanttChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const didAutoFocusTodayRef = useRef(false);
   const workloadTouchStartXRef = useRef<number | null>(null);
@@ -160,7 +173,11 @@ export function GanttChart({
   const { rangeStart, rangeEnd, totalDays } = useMemo(() => {
     if (!data.length) {
       const today = new Date();
-      return { rangeStart: startOfWeek(today, { locale: ko }), rangeEnd: endOfWeek(addDays(today, 28), { locale: ko }), totalDays: 35 };
+      return {
+        rangeStart: startOfWeek(today, { locale: ko }),
+        rangeEnd: endOfWeek(addDays(today, 28), { locale: ko }),
+        totalDays: 35,
+      };
     }
 
     let minDate = Infinity;
@@ -275,7 +292,9 @@ export function GanttChart({
         const overlapEnd = iEnd > to ? to : iEnd;
         if (overlapStart <= overlapEnd) {
           const days = eachDayOfInterval({ start: overlapStart, end: overlapEnd });
-          days.forEach((d) => { if (!isWeekend(d)) assignedDays.add(format(d, 'yyyy-MM-dd')); });
+          days.forEach((d) => {
+            if (!isWeekend(d)) assignedDays.add(format(d, 'yyyy-MM-dd'));
+          });
         }
       }
       const utilization = businessDaysTotal > 0 ? Math.round((assignedDays.size / businessDaysTotal) * 100) : 0;
@@ -370,15 +389,11 @@ export function GanttChart({
 
     const summaries = [...workloadSummary.summaries];
     summaries.sort((a, b) => {
-      const utilizationDiff = workloadSort === 'high'
-        ? b.utilization - a.utilization
-        : a.utilization - b.utilization;
+      const utilizationDiff = workloadSort === 'high' ? b.utilization - a.utilization : a.utilization - b.utilization;
 
       if (utilizationDiff !== 0) return utilizationDiff;
 
-      const assignedDiff = workloadSort === 'high'
-        ? b.assignedDays - a.assignedDays
-        : a.assignedDays - b.assignedDays;
+      const assignedDiff = workloadSort === 'high' ? b.assignedDays - a.assignedDays : a.assignedDays - b.assignedDays;
       if (assignedDiff !== 0) return assignedDiff;
 
       return a.developerName.localeCompare(b.developerName);
@@ -389,7 +404,7 @@ export function GanttChart({
 
   const workloadPages = useMemo(() => {
     if (!workloadSummary) return [];
-    const pages: typeof workloadSummary.summaries[] = [];
+    const pages: (typeof workloadSummary.summaries)[] = [];
     for (let i = 0; i < sortedWorkloadSummaries.length; i += WORKLOAD_PAGE_SIZE) {
       pages.push(sortedWorkloadSummaries.slice(i, i + WORKLOAD_PAGE_SIZE));
     }
@@ -418,26 +433,29 @@ export function GanttChart({
     workloadTouchStartXRef.current = e.touches[0]?.clientX ?? null;
   }, []);
 
-  const handleWorkloadTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    if (workloadPages.length <= 1) return;
+  const handleWorkloadTouchEnd = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      if (workloadPages.length <= 1) return;
 
-    const startX = workloadTouchStartXRef.current;
-    const endX = e.changedTouches[0]?.clientX;
-    workloadTouchStartXRef.current = null;
-    if (startX == null || endX == null) return;
+      const startX = workloadTouchStartXRef.current;
+      const endX = e.changedTouches[0]?.clientX;
+      workloadTouchStartXRef.current = null;
+      if (startX == null || endX == null) return;
 
-    const deltaX = endX - startX;
-    const SWIPE_THRESHOLD = 40;
+      const deltaX = endX - startX;
+      const SWIPE_THRESHOLD = 40;
 
-    if (deltaX <= -SWIPE_THRESHOLD) {
-      setWorkloadPage((prev) => Math.min(workloadPages.length - 1, prev + 1));
-      return;
-    }
+      if (deltaX <= -SWIPE_THRESHOLD) {
+        setWorkloadPage((prev) => Math.min(workloadPages.length - 1, prev + 1));
+        return;
+      }
 
-    if (deltaX >= SWIPE_THRESHOLD) {
-      setWorkloadPage((prev) => Math.max(0, prev - 1));
-    }
-  }, [workloadPages.length]);
+      if (deltaX >= SWIPE_THRESHOLD) {
+        setWorkloadPage((prev) => Math.max(0, prev - 1));
+      }
+    },
+    [workloadPages.length],
+  );
 
   if (!data.length) {
     return (
@@ -454,21 +472,38 @@ export function GanttChart({
   }
 
   return (
-    <div ref={containerRef} className={cn('relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-[var(--card)]', className)}>
+    <div
+      ref={containerRef}
+      className={cn(
+        'relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl border bg-[var(--card)]',
+        className,
+      )}
+    >
       {/* 네비게이션 헤더 */}
       <div className="shrink-0 flex items-center justify-between border-b bg-[var(--muted)] px-3 py-2">
         <div className="flex items-center gap-1 sm:gap-2">
-          <button type="button" onClick={handlePrev} disabled={viewOffset === 0}
-            className="rounded-md p-1 transition-colors hover:bg-[var(--accent)] disabled:opacity-30">
+          <button
+            type="button"
+            onClick={handlePrev}
+            disabled={viewOffset === 0}
+            className="rounded-md p-1 transition-colors hover:bg-[var(--accent)] disabled:opacity-30"
+          >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <button type="button" onClick={handleToday}
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:bg-[var(--accent)]">
+          <button
+            type="button"
+            onClick={handleToday}
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:bg-[var(--accent)]"
+          >
             <Calendar className="h-3 w-3" />
             <span className="hidden sm:inline">오늘</span>
           </button>
-          <button type="button" onClick={handleNext} disabled={viewOffset >= maxOffset}
-            className="rounded-md p-1 transition-colors hover:bg-[var(--accent)] disabled:opacity-30">
+          <button
+            type="button"
+            onClick={handleNext}
+            disabled={viewOffset >= maxOffset}
+            className="rounded-md p-1 transition-colors hover:bg-[var(--accent)] disabled:opacity-30"
+          >
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
@@ -482,7 +517,10 @@ export function GanttChart({
         <div style={{ width: LABEL_WIDTH + chartWidth, minWidth: '100%' }}>
           {/* 날짜 헤더 */}
           <div className="sticky top-0 z-30 flex border-b bg-[var(--card)]">
-            <div style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }} className="shrink-0 border-r bg-[var(--muted)] px-2 py-1" />
+            <div
+              style={{ width: LABEL_WIDTH, minWidth: LABEL_WIDTH }}
+              className="shrink-0 border-r bg-[var(--muted)] px-2 py-1"
+            />
             <div className="flex">
               {visibleDays.map((day, i) => {
                 const isToday = differenceInCalendarDays(day, new Date()) === 0;
@@ -504,10 +542,17 @@ export function GanttChart({
                     )}
                     title="클릭하여 공수 현황 기준일로 설정"
                   >
-                    {(i === 0 || isMonthStart || (isMobile && day.getDate() % 7 === 1) || (!isMobile && (day.getDate() === 1 || day.getDate() === 15 || i === 0))) && (
+                    {(i === 0 ||
+                      isMonthStart ||
+                      (isMobile && day.getDate() % 7 === 1) ||
+                      (!isMobile && (day.getDate() === 1 || day.getDate() === 15 || i === 0))) && (
                       <div className="truncate font-medium">{format(day, isMobile ? 'M/d' : 'M/dd')}</div>
                     )}
-                    {!isMobile && <div className={cn('text-[9px]', isWknd && 'text-red-400/60')}>{format(day, 'EEE', { locale: ko })}</div>}
+                    {!isMobile && (
+                      <div className={cn('text-[9px]', isWknd && 'text-red-400/60')}>
+                        {format(day, 'EEE', { locale: ko })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -576,7 +621,9 @@ export function GanttChart({
                         issue.projectId ? (projectVariantMap.get(issue.projectId) ?? 0) : 0,
                         useProjectAwareColors,
                       );
+                      const toneKey = getStatusToneKey(issue.status);
                       const isPastIssue = issueEnd < todayStart;
+                      const isTerminalIssue = toneKey === 'done' || toneKey === 'closed';
 
                       return (
                         <button
@@ -593,12 +640,16 @@ export function GanttChart({
                             width: clampedWidth,
                             height: ROW_HEIGHT - 6,
                             backgroundColor: tone.bg,
-                            borderColor: isPastIssue ? `${tone.border}aa` : tone.border,
+                            borderColor: isPastIssue && !isTerminalIssue ? `${tone.border}aa` : tone.border,
                             boxShadow: useProjectAwareColors
-                              ? `0 0 0 1px ${tone.border}${isPastIssue ? '08' : '18'} inset`
+                              ? `0 0 0 1px ${tone.border}${isPastIssue && !isTerminalIssue ? '08' : '18'} inset`
                               : undefined,
-                            opacity: isPastIssue ? 0.45 : 1,
-                            filter: isPastIssue ? 'saturate(0.42) brightness(0.72)' : undefined,
+                            opacity: isPastIssue ? (isTerminalIssue ? 0.74 : 0.52) : 1,
+                            filter: isPastIssue
+                              ? isTerminalIssue
+                                ? 'saturate(0.72) brightness(0.9)'
+                                : 'saturate(0.42) brightness(0.72)'
+                              : undefined,
                           }}
                           onClick={() => handleIssueClick(issue)}
                           onMouseEnter={(e) => handleMouseEnter(e, issue)}
@@ -607,8 +658,11 @@ export function GanttChart({
                           title={`${issue.issueKey} 열기`}
                         >
                           <div
-                            className={cn('truncate px-1 text-[10px] font-medium leading-snug', isMobile ? 'hidden' : '')}
-                            style={{ color: tone.text, opacity: isPastIssue ? 0.78 : 1 }}
+                            className={cn(
+                              'truncate px-1 text-[10px] font-medium leading-snug',
+                              isMobile ? 'hidden' : '',
+                            )}
+                            style={{ color: tone.text, opacity: isPastIssue && !isTerminalIssue ? 0.78 : 1 }}
                           >
                             {clampedWidth > 60 ? issue.issueKey : ''}
                             {clampedWidth > 120 && ` ${issue.summary.slice(0, 20)}`}
@@ -626,60 +680,67 @@ export function GanttChart({
 
       {/* 공수 요약 */}
       {workloadSummary && (
-        <div className={cn(
-          'shrink-0 border-t bg-[var(--muted)]/20 px-3 py-2',
-          singleDeveloper ? 'h-[138px]' : 'h-[204px]',
-        )}>
+        <div
+          className={cn(
+            'shrink-0 border-t bg-[var(--muted)]/20 px-3 py-2',
+            singleDeveloper ? 'h-[138px]' : 'h-[204px]',
+          )}
+        >
           <div className="flex h-full min-h-0 flex-col">
             <div className="mb-2 flex shrink-0 flex-wrap items-center gap-2">
-            <p className="text-xs font-semibold text-[var(--card-foreground)]">현재 보이는 기간 공수 현황</p>
-            <span className="rounded-full border border-[var(--border)]/80 bg-[var(--card)] px-2 py-0.5 text-[10px] text-[var(--muted-foreground)]">
-              기준 {format(workloadSummary.baseDate, 'yyyy.MM.dd')} ~ {format(workloadSummary.endDate, 'MM.dd')} · 영업일 {workloadSummary.businessDaysTotal}일
-            </span>
-            {(sortedWorkloadSummaries.length > 1 || (!singleDeveloper && workloadPages.length > 1)) && (
-              <div className="ml-auto flex items-center gap-2">
-                {sortedWorkloadSummaries.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => setWorkloadSort((prev) => (prev === 'high' ? 'low' : 'high'))}
-                    className="inline-flex items-center gap-1 rounded-md border border-[var(--border)]/80 bg-[var(--card)] px-2 py-1 text-[10px] text-[var(--card-foreground)] transition-colors hover:bg-[var(--accent)]"
-                    title="공수 정렬 토글"
-                  >
-                    <ArrowUpDown className="h-3 w-3" />
-                    {workloadSort === 'high' ? '공수 많은 순' : '공수 적은 순'}
-                  </button>
-                )}
-                {!singleDeveloper && workloadPages.length > 1 && (
-                  <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setWorkloadPage((prev) => Math.max(0, prev - 1))}
-                  disabled={workloadPage === 0}
-                  className="rounded-md border border-[var(--border)]/70 p-1 transition-colors hover:bg-[var(--accent)] disabled:opacity-40"
-                  aria-label="이전 공수 카드"
-                >
-                  <ChevronLeft className="h-3.5 w-3.5" />
-                </button>
-                <span className="px-1 text-[10px] text-[var(--muted-foreground)]">
-                  {workloadPage + 1} / {workloadPages.length}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setWorkloadPage((prev) => Math.min(workloadPages.length - 1, prev + 1))}
-                  disabled={workloadPage >= workloadPages.length - 1}
-                  className="rounded-md border border-[var(--border)]/70 p-1 transition-colors hover:bg-[var(--accent)] disabled:opacity-40"
-                  aria-label="다음 공수 카드"
-                >
-                  <ChevronRight className="h-3.5 w-3.5" />
-                </button>
-              </div>
-                )}
-              </div>
-            )}
+              <p className="text-xs font-semibold text-[var(--card-foreground)]">현재 보이는 기간 공수 현황</p>
+              <span className="rounded-full border border-[var(--border)]/80 bg-[var(--card)] px-2 py-0.5 text-[10px] text-[var(--muted-foreground)]">
+                기준 {format(workloadSummary.baseDate, 'yyyy.MM.dd')} ~ {format(workloadSummary.endDate, 'MM.dd')} ·
+                영업일 {workloadSummary.businessDaysTotal}일
+              </span>
+              {(sortedWorkloadSummaries.length > 1 || (!singleDeveloper && workloadPages.length > 1)) && (
+                <div className="ml-auto flex items-center gap-2">
+                  {sortedWorkloadSummaries.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setWorkloadSort((prev) => (prev === 'high' ? 'low' : 'high'))}
+                      className="inline-flex items-center gap-1 rounded-md border border-[var(--border)]/80 bg-[var(--card)] px-2 py-1 text-[10px] text-[var(--card-foreground)] transition-colors hover:bg-[var(--accent)]"
+                      title="공수 정렬 토글"
+                    >
+                      <ArrowUpDown className="h-3 w-3" />
+                      {workloadSort === 'high' ? '공수 많은 순' : '공수 적은 순'}
+                    </button>
+                  )}
+                  {!singleDeveloper && workloadPages.length > 1 && (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setWorkloadPage((prev) => Math.max(0, prev - 1))}
+                        disabled={workloadPage === 0}
+                        className="rounded-md border border-[var(--border)]/70 p-1 transition-colors hover:bg-[var(--accent)] disabled:opacity-40"
+                        aria-label="이전 공수 카드"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                      </button>
+                      <span className="px-1 text-[10px] text-[var(--muted-foreground)]">
+                        {workloadPage + 1} / {workloadPages.length}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setWorkloadPage((prev) => Math.min(workloadPages.length - 1, prev + 1))}
+                        disabled={workloadPage >= workloadPages.length - 1}
+                        className="rounded-md border border-[var(--border)]/70 p-1 transition-colors hover:bg-[var(--accent)] disabled:opacity-40"
+                        aria-label="다음 공수 카드"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <div className="min-h-0 flex-1">
               {!singleDeveloper && workloadSummary.summaries.length >= WORKLOAD_PAGE_SIZE ? (
-                <div className="h-full overflow-hidden" onTouchStart={handleWorkloadTouchStart} onTouchEnd={handleWorkloadTouchEnd}>
+                <div
+                  className="h-full overflow-hidden"
+                  onTouchStart={handleWorkloadTouchStart}
+                  onTouchEnd={handleWorkloadTouchEnd}
+                >
                   <div
                     className="flex transition-transform duration-300 ease-out"
                     style={{ transform: `translateX(-${workloadPage * 100}%)` }}
@@ -688,25 +749,45 @@ export function GanttChart({
                       <div key={pageIdx} className="w-full shrink-0">
                         <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
                           {page.map((s) => (
-                            <div key={s.developerName} className="rounded-lg border border-[var(--border)]/70 bg-[var(--card)] p-2">
+                            <div
+                              key={s.developerName}
+                              className="rounded-lg border border-[var(--border)]/70 bg-[var(--card)] p-2"
+                            >
                               <div className="mb-1.5 flex items-center justify-between gap-2">
-                                <span className={cn('truncate text-xs font-semibold text-[var(--card-foreground)]', isMobile ? 'max-w-28' : 'max-w-40')}>
+                                <span
+                                  className={cn(
+                                    'truncate text-xs font-semibold text-[var(--card-foreground)]',
+                                    isMobile ? 'max-w-28' : 'max-w-40',
+                                  )}
+                                >
                                   {s.developerName}
                                 </span>
-                                <span className={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', getUtilizationTone(s.utilization).badge)}>
+                                <span
+                                  className={cn(
+                                    'rounded-full border px-2 py-0.5 text-[10px] font-medium',
+                                    getUtilizationTone(s.utilization).badge,
+                                  )}
+                                >
                                   {getUtilizationTone(s.utilization).label}
                                 </span>
                               </div>
 
                               <div className="mb-1.5 h-2 w-full overflow-hidden rounded-full bg-[var(--muted)]/80">
                                 <div
-                                  className={cn('h-full rounded-full transition-all', getUtilizationTone(s.utilization).bar)}
+                                  className={cn(
+                                    'h-full rounded-full transition-all',
+                                    getUtilizationTone(s.utilization).bar,
+                                  )}
                                   style={{ width: `${Math.min(100, s.utilization)}%` }}
                                 />
                               </div>
 
                               <div className="flex items-center justify-between text-[10px]">
-                                <span className={cn('tabular-nums font-semibold', getUtilizationTone(s.utilization).text)}>{s.utilization}%</span>
+                                <span
+                                  className={cn('tabular-nums font-semibold', getUtilizationTone(s.utilization).text)}
+                                >
+                                  {s.utilization}%
+                                </span>
                                 <div className="flex items-center gap-1.5 text-[var(--muted-foreground)]">
                                   <span>할당 {s.assignedDays}일</span>
                                   <span>여유 {s.freeDays}일</span>
@@ -720,14 +801,32 @@ export function GanttChart({
                   </div>
                 </div>
               ) : (
-                <div className={cn('gap-1.5', singleDeveloper ? 'space-y-1.5' : 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3')}>
+                <div
+                  className={cn(
+                    'gap-1.5',
+                    singleDeveloper ? 'space-y-1.5' : 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3',
+                  )}
+                >
                   {sortedWorkloadSummaries.map((s) => (
-                    <div key={s.developerName} className="rounded-lg border border-[var(--border)]/70 bg-[var(--card)] p-2">
+                    <div
+                      key={s.developerName}
+                      className="rounded-lg border border-[var(--border)]/70 bg-[var(--card)] p-2"
+                    >
                       <div className="mb-1.5 flex items-center justify-between gap-2">
-                        <span className={cn('truncate text-xs font-semibold text-[var(--card-foreground)]', isMobile ? 'max-w-28' : 'max-w-40')}>
+                        <span
+                          className={cn(
+                            'truncate text-xs font-semibold text-[var(--card-foreground)]',
+                            isMobile ? 'max-w-28' : 'max-w-40',
+                          )}
+                        >
                           {s.developerName}
                         </span>
-                        <span className={cn('rounded-full border px-2 py-0.5 text-[10px] font-medium', getUtilizationTone(s.utilization).badge)}>
+                        <span
+                          className={cn(
+                            'rounded-full border px-2 py-0.5 text-[10px] font-medium',
+                            getUtilizationTone(s.utilization).badge,
+                          )}
+                        >
                           {getUtilizationTone(s.utilization).label}
                         </span>
                       </div>
@@ -740,7 +839,9 @@ export function GanttChart({
                       </div>
 
                       <div className="flex items-center justify-between text-[10px]">
-                        <span className={cn('tabular-nums font-semibold', getUtilizationTone(s.utilization).text)}>{s.utilization}%</span>
+                        <span className={cn('tabular-nums font-semibold', getUtilizationTone(s.utilization).text)}>
+                          {s.utilization}%
+                        </span>
                         <div className="flex items-center gap-1.5 text-[var(--muted-foreground)]">
                           <span>할당 {s.assignedDays}일</span>
                           <span>여유 {s.freeDays}일</span>
@@ -757,12 +858,24 @@ export function GanttChart({
 
       {/* 범례 */}
       <div className="shrink-0 flex flex-wrap items-center gap-x-3 gap-y-1 border-t px-3 py-1 text-[10px] text-[var(--muted-foreground)]">
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-emerald-500/80" /> 완료</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-slate-600/70" /> 닫힘</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-blue-500/80" /> 진행중</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-amber-500/70" /> 대기</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-3 rounded-sm bg-slate-500/60" /> 기타</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-3 bg-blue-500" /> 오늘</span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-3 rounded-sm bg-emerald-500/80" /> 완료
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-3 rounded-sm bg-slate-400/90" /> 닫힘
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-3 rounded-sm bg-blue-500/80" /> 진행중
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-3 rounded-sm bg-amber-500/70" /> 대기
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-2 w-3 rounded-sm bg-slate-500/60" /> 기타
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="inline-block h-0.5 w-3 bg-blue-500" /> 오늘
+        </span>
       </div>
 
       {/* 툴팁 */}
@@ -793,7 +906,9 @@ export function GanttChart({
             </div>
             <div className="flex justify-between">
               <span>기간</span>
-              <span className="font-medium text-[var(--popover-foreground)]">{hoveredIssue.issue.startDate} → {hoveredIssue.issue.endDate}</span>
+              <span className="font-medium text-[var(--popover-foreground)]">
+                {hoveredIssue.issue.startDate} → {hoveredIssue.issue.endDate}
+              </span>
             </div>
             <div className="flex justify-between">
               <span>구분</span>
@@ -804,13 +919,19 @@ export function GanttChart({
             <div className="flex justify-between">
               <span>소요일</span>
               <span className="font-medium text-[var(--popover-foreground)]">
-                {differenceInCalendarDays(parseISO(hoveredIssue.issue.endDate), parseISO(hoveredIssue.issue.startDate)) + 1}일
+                {differenceInCalendarDays(
+                  parseISO(hoveredIssue.issue.endDate),
+                  parseISO(hoveredIssue.issue.startDate),
+                ) + 1}
+                일
               </span>
             </div>
             {hoveredIssue.issue.plannedEffort != null && (
               <div className="flex justify-between">
                 <span>계획공수</span>
-                <span className="font-medium text-[var(--popover-foreground)]">{hoveredIssue.issue.plannedEffort}h</span>
+                <span className="font-medium text-[var(--popover-foreground)]">
+                  {hoveredIssue.issue.plannedEffort}h
+                </span>
               </div>
             )}
             {hoveredIssue.issue.actualEffort != null && (

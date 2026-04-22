@@ -18,14 +18,11 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const { id } = await params;
     if (!id) {
-      return NextResponse.json(
-        { success: false, data: null, error: '개발자 ID가 필요합니다.' },
-        { status: 400 },
-      );
+      return NextResponse.json({ success: false, data: null, error: '개발자 ID가 필요합니다.' }, { status: 400 });
     }
 
     const mrs = await prisma.gitlabMR.findMany({
-      where: { workspaceId: authResult.context.workspace.id, authorId: id },
+      where: { workspaceId: authResult.context.workspace.id, authorId: id, project: { isActive: true } },
       include: {
         project: { select: { type: true, name: true, projectKey: true, baseUrl: true } },
       },

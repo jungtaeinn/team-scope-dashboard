@@ -4,9 +4,10 @@ import { useMemo } from 'react';
 import { differenceInCalendarDays, format, parseISO, subDays } from 'date-fns';
 import { Clock, MessageSquare, TrendingDown, TrendingUp, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useDashboardInsights, useDeveloperScores } from '@/hooks';
+import { useDashboardInsights } from '@/hooks';
 import { useFilterParams } from '@/hooks/use-filter-params';
 import { buildDynamicScoreThresholds } from './score-thresholds';
+import type { DashboardInsightsData } from '@/hooks/use-dashboard-insights';
 
 interface SummaryCard {
   label: string;
@@ -28,13 +29,27 @@ function calculateTrendPercent(current: number, previous: number) {
     return current > 0 ? null : null;
   }
 
-  return Math.round((((current - previous) / previous) * 100) * 10) / 10;
+  return Math.round(((current - previous) / previous) * 100 * 10) / 10;
 }
 
 function resolveStatus(current: number, threshold: { goodMin: number; warnMin: number }): SummaryCard['status'] {
   if (current >= threshold.goodMin) return 'good';
   if (current >= threshold.warnMin) return 'warn';
   return 'risk';
+}
+
+function summarizeDeveloperDetails(details: DashboardInsightsData['developerDetails']) {
+  return {
+    developerCount: details.length,
+    avgComposite: average(details.map((detail) => detail.compositeScore)),
+    avgJira: average(details.map((detail) => detail.jira.total)),
+    avgGitlab: average(details.map((detail) => detail.gitlab.total)),
+  };
+}
+
+function average(values: number[]) {
+  if (values.length === 0) return 0;
+  return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 100) / 100;
 }
 
 /**
@@ -49,43 +64,55 @@ export function TeamSummaryCards({ className }: { className?: string }) {
   const previousToDate = subDays(currentFromDate, 1);
   const previousFromDate = subDays(previousToDate, rangeDays - 1);
   const previousLabel = `${format(previousFromDate, 'yyyy-MM-dd')} ~ ${format(previousToDate, 'yyyy-MM-dd')} 대비`;
-  const currentPeriod = period.to.slice(0, 7);
-
-  const { data: rawScores, isLoading } = useDeveloperScores({
-    period: currentPeriod,
-    developerIds: developers.length ? developers : undefined,
-  });
-
-  const matchedDeveloperIds = useMemo(() => {
-    if (!rawScores) return developers.length ? developers : undefined;
-    if (!search.trim()) return developers.length ? developers : undefined;
-    const q = search.trim().toLowerCase();
-    return rawScores.filter((s) => s.developerName.toLowerCase().includes(q)).map((s) => s.developerId);
-  }, [rawScores, search, developers]);
-  const effectiveDeveloperIds = useMemo(() => {
-    if (search.trim()) {
-      return matchedDeveloperIds?.length ? matchedDeveloperIds : ['__no_match__'];
-    }
-    return developers.length ? developers : undefined;
-  }, [search, matchedDeveloperIds, developers]);
+  const baseDeveloperIds = useMemo(() => (developers.length ? developers : undefined), [developers]);
+  const trimmedSearch = search.trim().toLowerCase();
 
   const { data: currentInsights, isLoading: isCurrentInsightsLoading } = useDashboardInsights({
     from: period.from,
     to: period.to,
-    developerIds: effectiveDeveloperIds,
+    developerIds: baseDeveloperIds,
     projectIds: projects.length ? projects : undefined,
   });
+
+  const currentDeveloperDetails = currentInsights?.developerDetails;
+
+  const matchedDeveloperIds = useMemo(() => {
+    if (!trimmedSearch) return baseDeveloperIds;
+    if (!currentDeveloperDetails) return undefined;
+    return currentDeveloperDetails
+      .filter((detail) => detail.name.toLowerCase().includes(trimmedSearch))
+      .map((detail) => detail.id);
+  }, [baseDeveloperIds, currentDeveloperDetails, trimmedSearch]);
+
+  const effectiveDeveloperIds = useMemo(() => {
+    if (!trimmedSearch) return baseDeveloperIds;
+    return matchedDeveloperIds?.length ? matchedDeveloperIds : ['__no_match__'];
+  }, [baseDeveloperIds, matchedDeveloperIds, trimmedSearch]);
+
   const { data: previousInsights, isLoading: isPreviousInsightsLoading } = useDashboardInsights({
     from: format(previousFromDate, 'yyyy-MM-dd'),
     to: format(previousToDate, 'yyyy-MM-dd'),
     developerIds: effectiveDeveloperIds,
     projectIds: projects.length ? projects : undefined,
+    summaryOnly: true,
+    enabled: !trimmedSearch || Boolean(currentInsights),
   });
-  const dynamicThresholds = useMemo(() => buildDynamicScoreThresholds(currentInsights?.trend ?? []), [currentInsights?.trend]);
+  const dynamicThresholds = useMemo(
+    () => buildDynamicScoreThresholds(currentInsights?.trend ?? []),
+    [currentInsights?.trend],
+  );
+
+  const currentSummary = useMemo(() => {
+    if (!currentInsights) return null;
+    if (!trimmedSearch) return currentInsights.summary;
+    const filteredDetails =
+      currentDeveloperDetails?.filter((detail) => detail.name.toLowerCase().includes(trimmedSearch)) ?? [];
+    return summarizeDeveloperDetails(filteredDetails);
+  }, [currentDeveloperDetails, currentInsights, trimmedSearch]);
 
   const summaryData = useMemo<SummaryCard[]>(() => {
-    const hasSearchNoMatch = Boolean(search.trim()) && matchedDeveloperIds?.length === 0;
-    if (hasSearchNoMatch || !currentInsights?.summary) {
+    const hasSearchNoMatch = Boolean(trimmedSearch) && matchedDeveloperIds?.length === 0;
+    if (hasSearchNoMatch || !currentSummary) {
       return [
         { label: '총 개발자 수', value: '0명', trendPercent: null, icon: Users },
         { label: '평균 종합 점수', value: '-', trendPercent: null, icon: TrendingUp },
@@ -94,10 +121,10 @@ export function TeamSummaryCards({ className }: { className?: string }) {
       ];
     }
 
-    const count = currentInsights.summary.developerCount;
-    const avgComposite = currentInsights.summary.avgComposite;
-    const avgJira = currentInsights.summary.avgJira;
-    const avgGitlab = currentInsights.summary.avgGitlab;
+    const count = currentSummary.developerCount;
+    const avgComposite = currentSummary.avgComposite;
+    const avgJira = currentSummary.avgJira;
+    const avgGitlab = currentSummary.avgGitlab;
     const prevComposite = previousInsights?.summary.avgComposite ?? 0;
     const prevJira = previousInsights?.summary.avgJira ?? 0;
     const prevGitlab = previousInsights?.summary.avgGitlab ?? 0;
@@ -142,9 +169,9 @@ export function TeamSummaryCards({ className }: { className?: string }) {
         icon: MessageSquare,
       },
     ];
-  }, [currentInsights, previousInsights, dynamicThresholds, matchedDeveloperIds, previousLabel, search]);
+  }, [currentSummary, previousInsights, dynamicThresholds, matchedDeveloperIds, previousLabel, trimmedSearch]);
 
-  if (isLoading || isCurrentInsightsLoading || isPreviousInsightsLoading) {
+  if (isCurrentInsightsLoading || isPreviousInsightsLoading) {
     return (
       <div className={cn('grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4', className)}>
         {Array.from({ length: 4 }).map((_, i) => (
@@ -182,7 +209,9 @@ export function TeamSummaryCards({ className }: { className?: string }) {
               <div className="flex items-start justify-between gap-2">
                 <p className="text-xs font-medium text-[var(--muted-foreground)]">{card.label}</p>
                 {statusLabel ? (
-                  <span className={cn('shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold', statusTone)}>
+                  <span
+                    className={cn('shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold', statusTone)}
+                  >
                     {statusLabel}
                   </span>
                 ) : null}

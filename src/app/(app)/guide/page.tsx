@@ -11,20 +11,14 @@ import {
   ChevronRight,
   FolderGit2,
   GitPullRequestArrow,
+  Layers,
   LayoutDashboard,
   Link2,
+  SlidersHorizontal,
   Users,
 } from 'lucide-react';
 
-function GuideScreen({
-  title,
-  eyebrow,
-  children,
-}: {
-  title: string;
-  eyebrow: string;
-  children: React.ReactNode;
-}) {
+function GuideScreen({ title, eyebrow, children }: { title: string; eyebrow: string; children: React.ReactNode }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
       <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--muted)]/40 px-4 py-3">
@@ -74,9 +68,7 @@ function GuideStep({
             <p className="mt-1 text-sm leading-6 text-[var(--muted-foreground)]">{description}</p>
           </div>
         </div>
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--background)]/60 p-4">
-          {children}
-        </div>
+        <div className="rounded-xl border border-[var(--border)] bg-[var(--background)]/60 p-4">{children}</div>
         <Link
           href={actionHref}
           className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)]"
@@ -109,65 +101,132 @@ function QuickChecklist() {
   );
 }
 
-function ProjectPreview() {
-  return (
-    <GuideScreen title="설정 > 프로젝트 관리" eyebrow="Project Setup">
-      <div className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
-            <p className="text-xs font-medium text-[var(--muted-foreground)]">프로젝트 이름</p>
-            <p className="mt-2 text-sm font-medium text-[var(--foreground)]">이니스프리 GitLab</p>
-          </div>
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
-            <p className="text-xs font-medium text-[var(--muted-foreground)]">연결 유형</p>
-            <p className="mt-2 inline-flex rounded-full bg-orange-500/15 px-2.5 py-1 text-xs font-medium text-orange-300">
-              GitLab 그룹 URL / 프로젝트 URL
-            </p>
-          </div>
-        </div>
+function SettingsMapCard() {
+  const tabs = [
+    {
+      label: '프로젝트 관리',
+      icon: FolderGit2,
+      desc: '프로젝트 관리, 프로젝트 기준 멤버 불러오기, 멤버 매핑',
+    },
+    { label: '그룹 관리', icon: Layers, desc: '개발자 그룹 생성과 멤버 배정' },
+    { label: '스코어링 가중치', icon: SlidersHorizontal, desc: '종합, Jira, GitLab 점수 비중' },
+    { label: '계정 관리', icon: Users, desc: '초대 링크, 로그인 계정, 권한 그룹', separated: true },
+  ];
 
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px] md:items-stretch">
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
-            <p className="text-xs font-medium text-[var(--muted-foreground)]">입력 예시</p>
-            <div className="mt-2 space-y-2 text-sm text-[var(--foreground)]">
-              <p className="rounded-lg border border-[var(--border)] px-3 py-2">https://jira.example.com</p>
-              <p className="rounded-lg border border-[var(--border)] px-3 py-2">https://gitlab.example.com/groups/sample-team</p>
-              <p className="rounded-lg border border-[var(--border)] px-3 py-2">DEMO-PROJECT 또는 sample-team</p>
-            </div>
-          </div>
-          <div className="grid gap-2 md:grid-rows-2">
-            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-3 text-sm text-emerald-300">
-              <BadgeCheck className="h-4 w-4" />
-              연결 테스트
-            </div>
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] px-3 py-3 text-sm text-[var(--foreground)]">
+  return (
+    <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--background)] p-4">
+      <p className="text-sm font-semibold text-[var(--foreground)]">설정 탭 순서</p>
+      <ol className="mt-3 space-y-2">
+        {tabs.map((tab, index) => {
+          const Icon = tab.icon;
+          return (
+            <li key={tab.label} className={tab.separated ? 'border-t border-[var(--border)] pt-2' : undefined}>
               <div className="flex items-start gap-2">
-                <Link2 className="mt-0.5 h-4 w-4 shrink-0 text-blue-400" />
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[var(--muted)] text-[10px] font-semibold text-[var(--muted-foreground)]">
+                  {index + 1}
+                </span>
                 <div className="min-w-0">
-                  <p className="font-medium text-[var(--foreground)]">저장 후 다시 확인</p>
-                  <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">
-                    프로젝트 카드의 연결 테스트 버튼으로 상태를 다시 점검할 수 있습니다.
-                  </p>
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-[var(--foreground)]">
+                    <Icon className="h-3.5 w-3.5 shrink-0 text-[var(--primary)]" />
+                    <span>{tab.label}</span>
+                  </div>
+                  <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">{tab.desc}</p>
                 </div>
               </div>
-            </div>
+            </li>
+          );
+        })}
+      </ol>
+      <p className="mt-3 text-xs leading-5 text-[var(--muted-foreground)]">
+        프로젝트 연결과 멤버 매핑은 이제 모두 프로젝트 관리 탭에서 이어서 처리합니다. 계정 관리는 별도 영역으로 분리되어
+        마지막에 배치됩니다.
+      </p>
+    </div>
+  );
+}
+
+function ProjectPreview() {
+  const settingsTabs = [
+    { label: '프로젝트 관리', icon: FolderGit2, active: true },
+    { label: '그룹 관리', icon: Layers },
+    { label: '스코어링 가중치', icon: SlidersHorizontal },
+    { label: '계정 관리', icon: Users, separated: true },
+  ];
+  const projectSections = [
+    { title: '프로젝트 관리', desc: '프로젝트 추가, 수정, 삭제, 연결 테스트' },
+    { title: '프로젝트 기준 멤버 불러오기', desc: '프로젝트를 고르고 멤버 조회 후 선택 저장' },
+    { title: '멤버 매핑', desc: '개발자 식별자, 그룹, 활성 상태 관리' },
+  ];
+
+  return (
+    <GuideScreen title="설정 > 프로젝트 관리" eyebrow="Project Setup">
+      <div className="space-y-5">
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-3">
+          <p className="text-xs font-semibold text-[var(--muted-foreground)]">설정 탭</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {settingsTabs.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <div
+                  key={tab.label}
+                  className={[
+                    'flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium',
+                    tab.active
+                      ? 'border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]'
+                      : 'border-[var(--border)] text-[var(--muted-foreground)]',
+                    tab.separated ? 'sm:col-start-2' : '',
+                  ].join(' ')}
+                >
+                  <Icon className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">{tab.label}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
 
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex rounded-full bg-blue-500/15 px-2.5 py-1 text-xs font-medium text-blue-300">Jira</span>
-                <span className="text-sm font-medium text-[var(--foreground)]">이니스프리 Jira</span>
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex rounded-full bg-orange-500/15 px-2.5 py-1 text-xs font-medium text-orange-300">
+                  GitLab
+                </span>
+                <span className="text-sm font-semibold text-[var(--foreground)]">이니스프리 GitLab</span>
               </div>
-              <p className="mt-2 text-xs text-[var(--muted-foreground)]">연결 성공 상태가 보이면 다음 단계로 넘어가면 됩니다.</p>
+              <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">
+                URL, 토큰, 프로젝트 키를 저장한 뒤 프로젝트 카드에서 연결 상태를 확인합니다.
+              </p>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300">
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300">
               <BadgeCheck className="h-3.5 w-3.5" />
               연결 성공
-            </div>
+            </span>
           </div>
+
+          <div className="mt-4 grid gap-2 text-xs text-[var(--foreground)]">
+            <div className="rounded-lg border border-[var(--border)] px-3 py-2">
+              https://gitlab.example.com/groups/sample-team
+            </div>
+            <div className="rounded-lg border border-[var(--border)] px-3 py-2">sample-team 또는 DEMO-PROJECT</div>
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-4">
+          <p className="text-sm font-semibold text-[var(--foreground)]">프로젝트 관리 탭 안의 섹션</p>
+          <ol className="mt-3 space-y-3">
+            {projectSections.map((section, index) => (
+              <li key={section.title} className="flex items-start gap-3">
+                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[var(--muted)] text-xs font-semibold text-[var(--foreground)]">
+                  {index + 1}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[var(--foreground)]">{section.title}</p>
+                  <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">{section.desc}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
         </div>
       </div>
     </GuideScreen>
@@ -175,70 +234,98 @@ function ProjectPreview() {
 }
 
 function MemberPreview() {
+  const lookupSteps = ['프로젝트 선택', '멤버 조회', '필요한 멤버만 선택 저장', '아래 멤버 매핑 표 확인'];
+  const mappedMembers = [
+    { name: '정태인', id: 'ap35018276', status: '자동 매칭됨', tone: 'emerald' },
+    { name: '장현홍', id: 'ap55004524', status: '선택 저장', tone: 'blue' },
+    { name: '신규 팀원', id: 'gitlab.new-member', status: '신규 후보', tone: 'amber' },
+  ];
+
   return (
-    <GuideScreen title="설정 > 멤버 매핑" eyebrow="Member Mapping">
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full bg-[var(--muted)] px-3 py-1 text-xs font-medium text-[var(--foreground)]">
-            프로젝트 선택
-          </span>
-          <ArrowRight className="h-4 w-4 text-[var(--muted-foreground)]" />
-          <span className="rounded-full bg-[var(--muted)] px-3 py-1 text-xs font-medium text-[var(--foreground)]">
-            멤버 조회
-          </span>
-          <ArrowRight className="h-4 w-4 text-[var(--muted-foreground)]" />
-          <span className="rounded-full bg-[var(--muted)] px-3 py-1 text-xs font-medium text-[var(--foreground)]">
-            필요한 멤버만 선택
-          </span>
-          <ArrowRight className="h-4 w-4 text-[var(--muted-foreground)]" />
-          <span className="rounded-full bg-blue-500/15 px-3 py-1 text-xs font-medium text-blue-300">
-            저장 + 동기화
-          </span>
+    <GuideScreen title="설정 > 프로젝트 관리" eyebrow="Member Mapping">
+      <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <div className="space-y-3">
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-4">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex rounded-full bg-orange-500/15 px-2.5 py-1 text-xs font-medium text-orange-300">
+                Jira
+              </span>
+              <p className="truncate text-sm font-semibold text-[var(--foreground)]">이니스프리 Jira</p>
+            </div>
+            <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">
+              프로젝트를 고르면 조회와 매핑을 같은 탭 안에서 이어서 처리합니다.
+            </p>
+          </div>
+
+          <ol className="space-y-2">
+            {lookupSteps.map((step, index) => (
+              <li
+                key={step}
+                className="flex items-center gap-3 rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2.5"
+              >
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[var(--muted)] text-xs font-semibold text-[var(--foreground)]">
+                  {index + 1}
+                </span>
+                <span className="min-w-0 truncate text-xs font-medium text-[var(--foreground)]">{step}</span>
+              </li>
+            ))}
+          </ol>
         </div>
 
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
-          <div className="flex items-center justify-between gap-3">
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-medium text-[var(--foreground)]">조회된 프로젝트 멤버</p>
+              <p className="text-sm font-semibold text-[var(--foreground)]">조회된 프로젝트 멤버</p>
               <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                이름이 비슷하거나 동일한 사람은 자동 매칭으로 먼저 연결됩니다.
+                선택 저장 후 바로 아래 매핑 표에 반영됩니다.
               </p>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-300">
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300">
               <Users className="h-3.5 w-3.5" />
-              자동 매칭 확인
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-[var(--foreground)]">정태인</p>
-              <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-300">
-                자동 매칭됨
-              </span>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <span className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs text-[var(--foreground)]">
-                GITLAB jungtaeinn
-              </span>
-              <span className="rounded-lg border border-[var(--border)] px-2.5 py-1 text-xs text-[var(--foreground)]">
-                AC/AP AP35018276
-              </span>
-            </div>
+              3명 조회됨
+            </span>
           </div>
 
-          <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-[var(--foreground)]">신규 팀원 예시</p>
-              <span className="rounded-full bg-blue-500/10 px-2.5 py-1 text-[11px] font-medium text-blue-300">
-                신규 생성
-              </span>
+          <div className="mt-4 divide-y divide-[var(--border)] overflow-hidden rounded-lg border border-[var(--border)]">
+            {mappedMembers.map((member) => (
+              <div key={member.name} className="grid gap-2 px-3 py-2.5 sm:grid-cols-[1fr_auto] sm:items-center">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-[var(--foreground)]">{member.name}</p>
+                  <p className="mt-0.5 truncate text-xs text-[var(--muted-foreground)]">{member.id}</p>
+                </div>
+                <span
+                  className={[
+                    'inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-medium',
+                    member.tone === 'emerald'
+                      ? 'bg-emerald-500/10 text-emerald-300'
+                      : member.tone === 'blue'
+                        ? 'bg-blue-500/10 text-blue-300'
+                        : 'bg-amber-500/10 text-amber-300',
+                  ].join(' ')}
+                >
+                  {member.status}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 flex items-center justify-between text-xs text-[var(--muted-foreground)]">
+            <span>페이지</span>
+            <div className="flex gap-1">
+              {[1, 2, 3].map((page) => (
+                <span
+                  key={page}
+                  className={[
+                    'flex h-6 w-6 items-center justify-center rounded border text-[11px]',
+                    page === 1
+                      ? 'border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]'
+                      : 'border-[var(--border)] text-[var(--muted-foreground)]',
+                  ].join(' ')}
+                >
+                  {page}
+                </span>
+              ))}
             </div>
-            <p className="mt-3 text-xs leading-5 text-[var(--muted-foreground)]">
-              기존 개발자와 자동 연결되지 않는 경우만 체크해서 저장하면, 새 개발자로 생성된 뒤 프로젝트 멤버로 함께 등록됩니다.
-            </p>
           </div>
         </div>
       </div>
@@ -247,43 +334,55 @@ function MemberPreview() {
 }
 
 function SyncPreview() {
+  const syncSteps = [
+    { title: '멤버 매핑 내용 저장', desc: '프로젝트 기준으로 선택한 멤버와 식별자를 먼저 확정합니다.' },
+    { title: '선택 프로젝트 데이터 수집', desc: '저장된 프로젝트만 대상으로 Jira/GitLab 데이터를 가져옵니다.' },
+    { title: '대시보드 지표 재계산', desc: '수집 결과를 기준으로 순위와 KPI를 다시 계산합니다.' },
+  ];
+
   return (
-    <GuideScreen title="설정 > 멤버 매핑" eyebrow="Save & Sync">
-      <div className="space-y-4">
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-medium text-[var(--foreground)]">저장 + 동기화 버튼을 누르면</p>
+    <GuideScreen title="설정 > 프로젝트 관리" eyebrow="Save & Sync">
+      <div className="grid gap-4 lg:grid-cols-[1fr_0.95fr]">
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-[var(--foreground)]">저장 + 동기화</p>
               <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">
-                멤버 매핑 저장, Jira/GitLab 데이터 수집, 점수 계산이 한 번에 진행됩니다.
+                멤버 매핑 저장과 선택 프로젝트 동기화가 한 번에 이어집니다.
               </p>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-blue-500/10 px-3 py-1.5 text-xs font-medium text-blue-300">
+            <span className="inline-flex w-fit items-center gap-1.5 rounded-full bg-blue-500/10 px-3 py-1.5 text-xs font-medium text-blue-300">
               <BadgeCheck className="h-3.5 w-3.5" />
-              저장 + 동기화
-            </div>
+              실행 준비
+            </span>
           </div>
+
+          <ol className="mt-4 space-y-3">
+            {syncSteps.map((step, index) => (
+              <li key={step.title} className="flex gap-3">
+                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded bg-[var(--muted)] text-xs font-semibold text-[var(--foreground)]">
+                  {index + 1}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[var(--foreground)]">{step.title}</p>
+                  <p className="mt-1 text-xs leading-5 text-[var(--muted-foreground)]">{step.desc}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="space-y-3">
           {[
-            '멤버 매핑 내용 저장',
-            'Jira / GitLab 데이터 수집',
-            '개발자 순위와 KPI 재계산',
-          ].map((label) => (
-            <div key={label} className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3 text-sm font-medium text-[var(--foreground)]">
-              {label}
+            ['동기화 범위', '선택한 활성 프로젝트만'],
+            ['완료 후 확인', '대시보드 KPI와 개발자 순위'],
+            ['값이 0일 때', '멤버 매핑 또는 원천 데이터 확인'],
+          ].map(([label, value]) => (
+            <div key={label} className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-4">
+              <p className="text-xs font-medium text-[var(--muted-foreground)]">{label}</p>
+              <p className="mt-2 text-sm font-semibold text-[var(--foreground)]">{value}</p>
             </div>
           ))}
-        </div>
-
-        <div className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
-          <p className="text-sm font-medium text-[var(--foreground)]">동기화가 끝난 뒤 체크할 것</p>
-          <ul className="mt-3 space-y-2 text-xs leading-5 text-[var(--muted-foreground)]">
-            <li>• 대시보드 상단 KPI에 값이 들어오는지 확인합니다.</li>
-            <li>• 개발자 순위에 Jira / GitLab 점수가 보이는지 확인합니다.</li>
-            <li>• 값이 0이면 보통 토큰보다 멤버 매핑 또는 원천 데이터 부족을 먼저 봅니다.</li>
-          </ul>
         </div>
       </div>
     </GuideScreen>
@@ -291,34 +390,70 @@ function SyncPreview() {
 }
 
 function DashboardPreview() {
+  const ranking = [
+    ['정태인', '92'],
+    ['장현홍', '87'],
+    ['신규 팀원', '74'],
+  ];
+
   return (
     <GuideScreen title="대시보드에서 확인할 것" eyebrow="Dashboard Check">
-      <div className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-3">
-          {[
-            { icon: LayoutDashboard, label: '팀 점수 추세', desc: '최근 기간에 성과가 좋아지는지 먼저 확인합니다.' },
-            { icon: Users, label: '개발자 순위', desc: '어떤 담당자가 강점/주의 상태인지 바로 확인합니다.' },
-            { icon: GitPullRequestArrow, label: 'Jira / GitLab 활동', desc: '티켓과 MR이 실제로 수집됐는지 함께 확인합니다.' },
-          ].map((item) => {
-            const Icon = item.icon;
-            return (
-              <div key={item.label} className="rounded-xl border border-[var(--border)] bg-[var(--background)] p-3">
-                <div className="flex items-center gap-2 text-sm font-medium text-[var(--foreground)]">
-                  <Icon className="h-4 w-4 text-blue-400" />
-                  {item.label}
-                </div>
-                <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">{item.desc}</p>
-              </div>
-            );
-          })}
+      <div className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-[var(--muted-foreground)]">팀 종합 점수</p>
+              <p className="mt-2 text-3xl font-bold text-[var(--foreground)]">84</p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300">
+              <LayoutDashboard className="h-3.5 w-3.5" />
+              반영 완료
+            </span>
+          </div>
+          <div className="mt-5 flex h-24 items-end gap-2">
+            {[42, 58, 48, 72, 84, 76].map((height, index) => (
+              <div
+                key={`${height}-${index}`}
+                className="flex-1 rounded-t bg-[var(--primary)]/80"
+                style={{ height: `${height}%` }}
+              />
+            ))}
+          </div>
+          <p className="mt-3 text-xs leading-5 text-[var(--muted-foreground)]">
+            최근 기간 흐름과 동기화 직후 지표 변화를 먼저 확인합니다.
+          </p>
         </div>
-        <div className="rounded-xl border border-[var(--border)] bg-blue-500/8 p-4">
-          <p className="text-sm font-medium text-[var(--foreground)]">처음 사용하는 분은 이렇게만 보시면 됩니다.</p>
-          <ol className="mt-3 space-y-2 text-sm leading-6 text-[var(--muted-foreground)]">
-            <li>1. 프로젝트 관리에서 Jira / GitLab 연결 테스트가 성공인지 확인합니다.</li>
-            <li>2. 멤버 매핑에서 실제 일하는 담당자만 저장합니다.</li>
-            <li>3. 저장 + 동기화를 누른 뒤 대시보드로 돌아가 결과를 확인합니다.</li>
-          </ol>
+
+        <div className="space-y-3">
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-[var(--foreground)]">
+              <Users className="h-4 w-4 text-blue-400" />
+              개발자 순위
+            </div>
+            <div className="mt-3 space-y-2">
+              {ranking.map(([name, score], index) => (
+                <div key={name} className="flex items-center justify-between gap-3 text-sm">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-[var(--muted)] text-[11px] font-semibold text-[var(--foreground)]">
+                      {index + 1}
+                    </span>
+                    <span className="truncate text-[var(--foreground)]">{name}</span>
+                  </div>
+                  <span className="font-semibold text-[var(--foreground)]">{score}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--background)] p-4">
+            <div className="flex items-center gap-2 text-sm font-semibold text-[var(--foreground)]">
+              <GitPullRequestArrow className="h-4 w-4 text-blue-400" />
+              Jira / GitLab 활동
+            </div>
+            <p className="mt-2 text-xs leading-5 text-[var(--muted-foreground)]">
+              티켓, MR, 리뷰 댓글이 들어오면 개발자 상세에서 원천 활동까지 이어서 확인합니다.
+            </p>
+          </div>
         </div>
       </div>
     </GuideScreen>
@@ -341,13 +476,13 @@ export default function GuidePage() {
       },
       {
         icon: Users,
-        title: '2. 멤버 조회',
-        desc: '프로젝트 기준 멤버 불러오기로 실제 일하는 담당자를 먼저 가져옵니다.',
+        title: '2. 멤버 조회 및 매핑',
+        desc: '프로젝트 관리 탭 안에서 멤버를 불러오고, 아래 멤버 매핑 표에서 식별자를 확인합니다.',
       },
       {
         icon: Link2,
-        title: '3. 자동 매핑 확인',
-        desc: '자동 매칭된 사람은 그대로 두고, 필요한 사람만 체크해서 저장합니다.',
+        title: '3. 저장 + 동기화',
+        desc: '멤버 매핑 확인 후 선택 프로젝트 동기화로 실제 데이터를 수집합니다.',
       },
       {
         icon: LayoutDashboard,
@@ -379,30 +514,30 @@ export default function GuidePage() {
         key="step-2"
         number="2"
         title="프로젝트 기준 멤버를 불러와 매핑하세요"
-        description="설정 > 멤버 매핑에서 프로젝트를 선택하고 멤버 조회를 누르면, 실제 등록된 Jira/GitLab 멤버를 가져옵니다. 같은 사람으로 판단되는 경우는 자동으로 먼저 매칭합니다."
-        actionHref="/settings?tab=members"
-        actionLabel="멤버 매핑으로 바로 가기"
+        description="설정 > 프로젝트 관리에서 프로젝트를 선택하고 멤버 조회를 누르면, 실제 등록된 Jira/GitLab 멤버를 가져옵니다. 바로 아래 멤버 매핑 섹션에서 개발자 식별자와 그룹까지 이어서 확인할 수 있습니다."
+        actionHref="/settings?tab=projects"
+        actionLabel="프로젝트 관리로 바로 가기"
         preview={<MemberPreview />}
       >
         <ul className="space-y-2 text-sm leading-6 text-[var(--muted-foreground)]">
-          <li>• 조회된 사람 중 필요한 사람만 체크하면 됩니다.</li>
+          <li>• 조회된 사람 중 필요한 사람만 체크한 뒤 선택 멤버 저장을 누르면 됩니다.</li>
           <li>• 같은 이름, AC/AP 식별자, 이메일 아이디, GitLab 사용자명을 기준으로 자동 매칭합니다.</li>
-          <li>• 자동 매칭이 안 된 사람만 신규 생성 대상으로 보입니다.</li>
+          <li>• 자동 매칭이 안 된 사람은 신규 생성 대상으로 보이고, 저장 후 멤버 매핑 표에서 관리됩니다.</li>
         </ul>
       </GuideStep>,
       <GuideStep
         key="step-3"
         number="3"
         title="저장 + 동기화로 마무리하세요"
-        description="멤버 매핑까지 끝났다면 저장 + 동기화를 눌러 실제 Jira/GitLab 데이터를 가져옵니다. 이 단계가 끝나야 대시보드와 개발자 화면에 점수와 추세가 보입니다."
-        actionHref="/settings?tab=members"
+        description="프로젝트 기준 멤버 저장과 멤버 매핑 확인까지 끝났다면 저장 + 동기화를 눌러 실제 Jira/GitLab 데이터를 가져옵니다. 이 단계가 끝나야 대시보드와 개발자 화면에 점수와 추세가 보입니다."
+        actionHref="/settings?tab=projects"
         actionLabel="저장 + 동기화 위치 다시 보기"
         preview={<SyncPreview />}
       >
         <ul className="space-y-2 text-sm leading-6 text-[var(--muted-foreground)]">
           <li>• 저장한 멤버만 기준으로 데이터를 수집하므로, 먼저 멤버 선택을 정확히 해두는 게 중요합니다.</li>
           <li>• 동기화가 끝나면 대시보드 상단 KPI와 개발자 순위가 채워집니다.</li>
-          <li>• 값이 전부 0이면 토큰보다는 멤버 매핑이나 원천 데이터 부족을 먼저 확인하세요.</li>
+          <li>• 값이 전부 0이면 토큰보다는 프로젝트 관리 탭의 멤버 매핑이나 원천 데이터 부족을 먼저 확인하세요.</li>
         </ul>
       </GuideStep>,
       <GuideStep
@@ -427,9 +562,12 @@ export default function GuidePage() {
   const [activeStep, setActiveStep] = useState(0);
   const touchStartXRef = useRef<number | null>(null);
 
-  const goToStep = useCallback((index: number) => {
-    setActiveStep(Math.max(0, Math.min(slides.length - 1, index)));
-  }, [slides.length]);
+  const goToStep = useCallback(
+    (index: number) => {
+      setActiveStep(Math.max(0, Math.min(slides.length - 1, index)));
+    },
+    [slides.length],
+  );
 
   const goPrev = useCallback(() => {
     setActiveStep((prev) => Math.max(0, prev - 1));
@@ -443,16 +581,19 @@ export default function GuidePage() {
     touchStartXRef.current = e.touches[0]?.clientX ?? null;
   }, []);
 
-  const handleTouchEnd = useCallback((e: React.TouchEvent<HTMLDivElement>) => {
-    const startX = touchStartXRef.current;
-    const endX = e.changedTouches[0]?.clientX ?? null;
-    touchStartXRef.current = null;
-    if (startX == null || endX == null) return;
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      const startX = touchStartXRef.current;
+      const endX = e.changedTouches[0]?.clientX ?? null;
+      touchStartXRef.current = null;
+      if (startX == null || endX == null) return;
 
-    const deltaX = endX - startX;
-    if (deltaX <= -40) goNext();
-    if (deltaX >= 40) goPrev();
-  }, [goNext, goPrev]);
+      const deltaX = endX - startX;
+      if (deltaX <= -40) goNext();
+      if (deltaX >= 40) goPrev();
+    },
+    [goNext, goPrev],
+  );
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
@@ -463,11 +604,52 @@ export default function GuidePage() {
               <BookOpen className="h-3.5 w-3.5" />
               처음 쓰는 분을 위한 TeamScope 가이드
             </div>
-            <h1 className="mt-4 text-3xl font-bold tracking-tight text-[var(--foreground)]">프로젝트 연결부터 멤버 매핑까지, 그대로 따라하면 됩니다</h1>
+            <h1 className="mt-4 text-3xl font-bold tracking-tight text-[var(--foreground)]">
+              프로젝트 연결부터 멤버 매핑까지, 그대로 따라하면 됩니다
+            </h1>
             <p className="mt-3 text-sm leading-7 text-[var(--muted-foreground)]">
-              TeamScope를 처음 쓰는 분도 어렵지 않게 시작할 수 있도록 가장 자주 하는 작업만 순서대로 정리했습니다.
-              아래 4단계를 따라하면 프로젝트 연결, 멤버 매핑, 동기화, 대시보드 확인까지 한 번에 끝낼 수 있습니다.
+              TeamScope를 처음 쓰는 분도 어렵지 않게 시작할 수 있도록 가장 자주 하는 작업만 순서대로 정리했습니다. 아래
+              4단계를 따라하면 프로젝트 연결, 멤버 매핑, 동기화, 대시보드 확인까지 한 번에 끝낼 수 있습니다.
             </p>
+            <div className="mt-6 grid max-w-3xl gap-2 sm:grid-cols-2">
+              {steps.map((step, index) => {
+                const Icon = step.icon;
+                const isCurrent = activeStep === index;
+                return (
+                  <button
+                    key={step.title}
+                    type="button"
+                    onClick={() => goToStep(index)}
+                    className={[
+                      'flex min-w-0 items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors',
+                      isCurrent
+                        ? 'border-[var(--primary)] bg-[var(--primary)]/12'
+                        : 'border-[var(--border)] bg-[var(--background)] hover:bg-[var(--accent)]/40',
+                    ].join(' ')}
+                    aria-pressed={isCurrent}
+                  >
+                    <span
+                      className={[
+                        'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg',
+                        isCurrent
+                          ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
+                          : 'bg-[var(--muted)] text-[var(--muted-foreground)]',
+                      ].join(' ')}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-semibold text-[var(--foreground)]">
+                        {step.title}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[11px] text-[var(--muted-foreground)]">
+                        {index + 1}단계 바로 보기
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div className="rounded-2xl border border-[var(--border)] bg-[var(--background)] p-4 lg:w-[320px]">
@@ -475,6 +657,7 @@ export default function GuidePage() {
             <div className="mt-3">
               <QuickChecklist />
             </div>
+            <SettingsMapCard />
           </div>
         </div>
       </div>
@@ -501,7 +684,9 @@ export default function GuidePage() {
                   <div
                     className={[
                       'flex h-10 w-10 items-center justify-center rounded-xl transition-colors',
-                      isActive ? 'bg-[var(--primary)] text-[var(--primary-foreground)]' : 'bg-[var(--primary)]/12 text-[var(--primary)]',
+                      isActive
+                        ? 'bg-[var(--primary)] text-[var(--primary-foreground)]'
+                        : 'bg-[var(--primary)]/12 text-[var(--primary)]',
                     ].join(' ')}
                   >
                     <Icon className="h-5 w-5" />
@@ -524,7 +709,9 @@ export default function GuidePage() {
           <div className="flex items-center justify-between border-b border-[var(--border)] px-4 py-3">
             <div>
               <p className="text-sm font-semibold text-[var(--foreground)]">{steps[activeStep]?.title}</p>
-              <p className="mt-1 text-xs text-[var(--muted-foreground)]">아래 카드를 좌우로 넘기거나 단계 카드를 눌러 이동할 수 있습니다.</p>
+              <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                아래 카드를 좌우로 넘기거나 단계 카드를 눌러 이동할 수 있습니다.
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -572,7 +759,9 @@ export default function GuidePage() {
                 onClick={() => goToStep(index)}
                 className={[
                   'h-2.5 rounded-full transition-all',
-                  activeStep === index ? 'w-8 bg-[var(--primary)] shadow-[0_0_16px_rgba(59,130,246,0.55)]' : 'w-2.5 bg-[var(--border)] hover:bg-[var(--muted-foreground)]/50',
+                  activeStep === index
+                    ? 'w-8 bg-[var(--primary)] shadow-[0_0_16px_rgba(59,130,246,0.55)]'
+                    : 'w-2.5 bg-[var(--border)] hover:bg-[var(--muted-foreground)]/50',
                 ].join(' ')}
                 aria-label={`${index + 1}단계로 이동`}
               />

@@ -71,19 +71,22 @@ interface UseDashboardInsightsOptions {
   to?: string;
   developerIds?: string[];
   projectIds?: string[];
+  summaryOnly?: boolean;
+  enabled?: boolean;
 }
 
 export function useDashboardInsights(options?: UseDashboardInsightsOptions) {
-  const { from, to, developerIds, projectIds } = options ?? {};
+  const { from, to, developerIds, projectIds, summaryOnly = false, enabled = true } = options ?? {};
 
   return useQuery<DashboardInsightsData>({
-    queryKey: ['dashboard-insights', from, to, developerIds, projectIds],
+    queryKey: ['dashboard-insights', from, to, developerIds, projectIds, summaryOnly],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (from) params.set('from', from);
       if (to) params.set('to', to);
       if (developerIds?.length) params.set('developerIds', developerIds.join(','));
       if (projectIds?.length) params.set('projectIds', projectIds.join(','));
+      if (summaryOnly) params.set('summaryOnly', 'true');
 
       const res = await fetch(`/api/dashboard-insights?${params.toString()}`);
       if (!res.ok) throw new Error('대시보드 분석 데이터를 불러오는 데 실패했습니다.');
@@ -95,6 +98,7 @@ export function useDashboardInsights(options?: UseDashboardInsightsOptions) {
     },
     staleTime: 15 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
+    enabled,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
   });

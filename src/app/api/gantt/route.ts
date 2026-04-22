@@ -1,7 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { endOfDay, parseISO, startOfDay } from 'date-fns';
 import { requireApiContext } from '@/lib/auth/api';
 import { prisma } from '@/lib/db';
 import { formatDateOnly } from '@/lib/db/normalized-date';
+
+type GanttIssueRow = {
+  issueKey: string;
+  projectId: string | null;
+  project: { baseUrl: string; name: string } | null;
+  summary: string;
+  status: string;
+  sprintName: string | null;
+  issueType: string;
+  ganttStartDate: string | null;
+  ganttStartOn: Date | null;
+  ganttEndDate: string | null;
+  ganttEndOn: Date | null;
+  baselineStart: string | null;
+  baselineStartOn: Date | null;
+  baselineEnd: string | null;
+  baselineEndOn: Date | null;
+  ganttProgress: number | null;
+  plannedEffort: number | null;
+  actualEffort: number | null;
+  storyPoints: number | null;
+  assigneeId: string | null;
+};
+
+function parseDateBound(value: string | null, boundary: 'start' | 'end') {
+  if (!value) return null;
+  const parsed = parseISO(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return boundary === 'start' ? startOfDay(parsed) : endOfDay(parsed);
+}
 
 /**
  * GET /api/gantt
@@ -25,6 +56,8 @@ export async function GET(request: NextRequest) {
     const projectIds = projectIdsParam ? projectIdsParam.split(',').filter(Boolean) : undefined;
     const from = searchParams.get('from');
     const to = searchParams.get('to');
+    const fromDate = parseDateBound(from, 'start');
+    const toDate = parseDateBound(to, 'end');
 
     const developerWhere: Record<string, unknown> = { workspaceId, isActive: true };
     if (developerIds?.length) {
@@ -48,13 +81,42 @@ export async function GET(request: NextRequest) {
       ganttStartOn: { not: null },
       ganttEndOn: { not: null },
       assigneeId: { in: targetDeveloperIds },
+      project: { isActive: true },
       ...(projectIds?.length ? { projectId: { in: projectIds } } : {}),
     };
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const issues: any[] = await prisma.jiraIssue.findMany({
+    if (fromDate) {
+      issueWhere.ganttEndOn = { not: null, gte: fromDate };
+    }
+
+    if (toDate) {
+      issueWhere.ganttStartOn = { not: null, lte: toDate };
+    }
+
+    const issues: GanttIssueRow[] = await prisma.jiraIssue.findMany({
       where: issueWhere,
-      include: { assignee: true, project: true },
+      select: {
+        issueKey: true,
+        projectId: true,
+        project: { select: { baseUrl: true, name: true } },
+        summary: true,
+        status: true,
+        sprintName: true,
+        issueType: true,
+        ganttStartDate: true,
+        ganttStartOn: true,
+        ganttEndDate: true,
+        ganttEndOn: true,
+        baselineStart: true,
+        baselineStartOn: true,
+        baselineEnd: true,
+        baselineEndOn: true,
+        ganttProgress: true,
+        plannedEffort: true,
+        actualEffort: true,
+        storyPoints: true,
+        assigneeId: true,
+      },
       orderBy: { ganttStartOn: 'asc' },
     });
 

@@ -4,8 +4,15 @@ import { useState, useCallback, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { Search, Users } from 'lucide-react';
 
-interface Developer { id: string; name: string; groupId?: string; }
-interface DeveloperGroup { id: string; name: string; }
+interface Developer {
+  id: string;
+  name: string;
+  groupId?: string;
+}
+interface DeveloperGroup {
+  id: string;
+  name: string;
+}
 
 interface DeveloperFilterProps {
   developers: Developer[];
@@ -18,8 +25,12 @@ interface DeveloperFilterProps {
 export function DeveloperFilter({ developers, selectedIds, onChange, groups, className }: DeveloperFilterProps) {
   const [searchQuery, setSearchQuery] = useState('');
 
+  const allDeveloperIds = useMemo(() => developers.map((developer) => developer.id), [developers]);
+  const effectiveSelectedIds = selectedIds.length > 0 ? selectedIds : allDeveloperIds;
+
   const filteredDevelopers = useMemo(
-    () => searchQuery ? developers.filter((dev) => dev.name.toLowerCase().includes(searchQuery.toLowerCase())) : developers,
+    () =>
+      searchQuery ? developers.filter((dev) => dev.name.toLowerCase().includes(searchQuery.toLowerCase())) : developers,
     [developers, searchQuery],
   );
 
@@ -27,29 +38,53 @@ export function DeveloperFilter({ developers, selectedIds, onChange, groups, cla
     if (!groups?.length) return null;
     const map = new Map<string, Developer[]>();
     for (const group of groups) {
-      map.set(group.id, filteredDevelopers.filter((dev) => dev.groupId === group.id));
+      map.set(
+        group.id,
+        filteredDevelopers.filter((dev) => dev.groupId === group.id),
+      );
     }
     const ungrouped = filteredDevelopers.filter((dev) => !dev.groupId);
     if (ungrouped.length > 0) map.set('__ungrouped__', ungrouped);
     return map;
   }, [groups, filteredDevelopers]);
 
-  const handleSelectAll = useCallback(() => onChange(filteredDevelopers.map((dev) => dev.id)), [filteredDevelopers, onChange]);
+  const handleSelectAll = useCallback(
+    () => onChange(filteredDevelopers.map((dev) => dev.id)),
+    [filteredDevelopers, onChange],
+  );
   const handleDeselectAll = useCallback(() => onChange([]), [onChange]);
-  const handleToggle = useCallback((id: string) => onChange(selectedIds.includes(id) ? selectedIds.filter((sid) => sid !== id) : [...selectedIds, id]), [selectedIds, onChange]);
+  const handleToggle = useCallback(
+    (id: string) => {
+      if (selectedIds.length === 0) {
+        onChange(allDeveloperIds.filter((developerId) => developerId !== id));
+        return;
+      }
 
-  const handleGroupToggle = useCallback((groupId: string) => {
-    const groupDevIds = developers.filter((dev) => dev.groupId === groupId).map((dev) => dev.id);
-    const allSelected = groupDevIds.every((id) => selectedIds.includes(id));
-    if (allSelected) onChange(selectedIds.filter((id) => !groupDevIds.includes(id)));
-    else onChange(Array.from(new Set([...selectedIds, ...groupDevIds])));
-  }, [developers, selectedIds, onChange]);
+      onChange(selectedIds.includes(id) ? selectedIds.filter((sid) => sid !== id) : [...selectedIds, id]);
+    },
+    [allDeveloperIds, selectedIds, onChange],
+  );
+
+  const handleGroupToggle = useCallback(
+    (groupId: string) => {
+      const groupDevIds = developers.filter((dev) => dev.groupId === groupId).map((dev) => dev.id);
+      const allSelected = groupDevIds.every((id) => effectiveSelectedIds.includes(id));
+      if (allSelected) {
+        onChange(
+          selectedIds.length === 0
+            ? allDeveloperIds.filter((id) => !groupDevIds.includes(id))
+            : selectedIds.filter((id) => !groupDevIds.includes(id)),
+        );
+      } else onChange(Array.from(new Set([...selectedIds, ...groupDevIds])));
+    },
+    [allDeveloperIds, developers, effectiveSelectedIds, selectedIds, onChange],
+  );
 
   const renderDeveloperItem = (dev: Developer) => (
     <label key={dev.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 hover:bg-[var(--accent)]">
       <input
         type="checkbox"
-        checked={selectedIds.includes(dev.id)}
+        checked={effectiveSelectedIds.includes(dev.id)}
         onChange={() => handleToggle(dev.id)}
         className="h-3.5 w-3.5 rounded border-[var(--border)] text-[var(--primary)] focus:ring-[var(--primary)]"
       />
@@ -63,16 +98,24 @@ export function DeveloperFilter({ developers, selectedIds, onChange, groups, cla
         <div className="flex items-center gap-1.5">
           <Users className="h-4 w-4 text-[var(--muted-foreground)]" />
           <span className="text-xs font-medium text-[var(--card-foreground)]">개발자</span>
-          {selectedIds.length > 0 && (
+          {effectiveSelectedIds.length > 0 && (
             <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-100 px-1.5 text-xs font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-              {selectedIds.length}
+              {effectiveSelectedIds.length}
             </span>
           )}
         </div>
         <div className="flex gap-1">
-          <button type="button" onClick={handleSelectAll} className="text-xs text-[var(--primary)] hover:opacity-80">전체 선택</button>
+          <button type="button" onClick={handleSelectAll} className="text-xs text-[var(--primary)] hover:opacity-80">
+            전체 선택
+          </button>
           <span className="text-xs text-[var(--muted-foreground)]">|</span>
-          <button type="button" onClick={handleDeselectAll} className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]">선택 해제</button>
+          <button
+            type="button"
+            onClick={handleDeselectAll}
+            className="text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+          >
+            필터 해제
+          </button>
         </div>
       </div>
 
@@ -96,8 +139,14 @@ export function DeveloperFilter({ developers, selectedIds, onChange, groups, cla
             const group = groups?.find((g) => g.id === groupId);
             return (
               <div key={groupId}>
-                <button type="button" onClick={() => group && handleGroupToggle(groupId)} className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left">
-                  <span className="text-xs font-semibold text-[var(--muted-foreground)]">{group?.name ?? '미분류'}</span>
+                <button
+                  type="button"
+                  onClick={() => group && handleGroupToggle(groupId)}
+                  className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left"
+                >
+                  <span className="text-xs font-semibold text-[var(--muted-foreground)]">
+                    {group?.name ?? '미분류'}
+                  </span>
                   <span className="text-xs text-[var(--muted-foreground)]">({devs.length})</span>
                 </button>
                 {devs.map(renderDeveloperItem)}

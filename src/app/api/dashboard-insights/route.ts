@@ -264,7 +264,8 @@ async function buildRangeMetrics(params: {
   rangeStart: Date;
   rangeEnd: Date;
 }) {
-  const { developers, jiraIssuesByDeveloper, gitlabMrsByDeveloper, reviewNotesByDeveloper, rangeStart, rangeEnd } = params;
+  const { developers, jiraIssuesByDeveloper, gitlabMrsByDeveloper, reviewNotesByDeveloper, rangeStart, rangeEnd } =
+    params;
   const businessDaysTotal = Math.max(1, countBusinessDays(rangeStart, rangeEnd));
   const rangeStartTs = rangeStart.getTime();
   const rangeEndTs = rangeEnd.getTime();
@@ -272,7 +273,9 @@ async function buildRangeMetrics(params: {
   const mergedCountByDeveloper = new Map<string, number>();
   for (const developer of developers) {
     const developerMrs = gitlabMrsByDeveloper.get(developer.id) ?? [];
-    const count = developerMrs.filter((mr) => mrBelongsToRange(mr, rangeStartTs, rangeEndTs) && mr.state === 'merged').length;
+    const count = developerMrs.filter(
+      (mr) => mrBelongsToRange(mr, rangeStartTs, rangeEndTs) && mr.state === 'merged',
+    ).length;
     mergedCountByDeveloper.set(developer.id, count);
   }
 
@@ -350,16 +353,18 @@ async function buildRangeMetrics(params: {
         labels: [],
         isDraft: false,
         webUrl: '',
-        notes: mr.notes.filter((note) => noteBelongsToRange(note, rangeStartTs, rangeEndTs)).map((note) => ({
-          id: note.noteId,
-          body: '',
-          authorUsername: '',
-          authorName: '',
-          createdAt: note.noteCreatedAt,
-          isReviewComment: !note.isSystem,
-          isResolvable: note.isResolvable,
-          isResolved: note.isResolved,
-        })),
+        notes: mr.notes
+          .filter((note) => noteBelongsToRange(note, rangeStartTs, rangeEndTs))
+          .map((note) => ({
+            id: note.noteId,
+            body: '',
+            authorUsername: '',
+            authorName: '',
+            createdAt: note.noteCreatedAt,
+            isReviewComment: !note.isSystem,
+            isResolvable: note.isResolvable,
+            isResolved: note.isResolved,
+          })),
       })),
       scopedReviewNotes.map((note) => ({
         mrId: note.mrId,
@@ -391,9 +396,9 @@ async function buildRangeMetrics(params: {
     }
 
     const reviewedMrIds = new Set(scopedReviewNotes.map((note) => note.mrId));
-    const resolvableNotes = scopedMrs.flatMap((mr) => mr.notes).filter(
-      (note) => noteBelongsToRange(note, rangeStartTs, rangeEndTs) && note.isResolvable,
-    );
+    const resolvableNotes = scopedMrs
+      .flatMap((mr) => mr.notes)
+      .filter((note) => noteBelongsToRange(note, rangeStartTs, rangeEndTs) && note.isResolvable);
     const resolvedNotes = resolvableNotes.filter((note) => note.isResolved);
 
     return {
@@ -433,6 +438,7 @@ export async function GET(request: NextRequest) {
     const projectIds = searchParams.get('projectIds')?.split(',').filter(Boolean) ?? [];
     const from = parseDate(searchParams.get('from')) ?? startOfMonth(new Date());
     const to = parseDate(searchParams.get('to')) ?? endOfMonth(new Date());
+    const summaryOnly = searchParams.get('summaryOnly') === 'true';
 
     const developers = await prisma.developer.findMany({
       where: {
@@ -462,7 +468,12 @@ export async function GET(request: NextRequest) {
     }
 
     const targetDeveloperIds = developers.map((developer) => developer.id);
-    const projectFilter = projectIds.length ? { projectId: { in: projectIds } } : {};
+    const projectFilter = {
+      project: {
+        isActive: true,
+        ...(projectIds.length ? { id: { in: projectIds } } : {}),
+      },
+    };
     const overallRangeStart = startOfMonth(from);
     const overallRangeEnd = endOfMonth(to);
     const [jiraIssues, gitlabMrs, gitlabReviewNotes] = await Promise.all([
@@ -474,16 +485,10 @@ export async function GET(request: NextRequest) {
           OR: [
             { updatedAt: { gte: overallRangeStart, lte: overallRangeEnd } },
             {
-              AND: [
-                { ganttStartOn: { lte: overallRangeEnd } },
-                { ganttEndOn: { gte: overallRangeStart } },
-              ],
+              AND: [{ ganttStartOn: { lte: overallRangeEnd } }, { ganttEndOn: { gte: overallRangeStart } }],
             },
             {
-              AND: [
-                { ganttStartOn: { lte: overallRangeEnd } },
-                { dueOn: { gte: overallRangeStart } },
-              ],
+              AND: [{ ganttStartOn: { lte: overallRangeEnd } }, { dueOn: { gte: overallRangeStart } }],
             },
             { ganttEndOn: { gte: overallRangeStart, lte: overallRangeEnd } },
             { dueOn: { gte: overallRangeStart, lte: overallRangeEnd } },
@@ -568,7 +573,7 @@ export async function GET(request: NextRequest) {
           workspaceId,
           authorId: { in: targetDeveloperIds },
           noteCreatedAtTs: { gte: overallRangeStart, lte: overallRangeEnd },
-          ...(projectIds.length ? { mr: { projectId: { in: projectIds } } } : {}),
+          mr: projectFilter,
         },
         select: {
           id: true,
@@ -606,7 +611,8 @@ export async function GET(request: NextRequest) {
 
       const indexedNotes = mr.notes.map((note) => ({
         ...note,
-        createdTs: parseTimestamp(note.noteCreatedAtTs) ?? parseTimestamp(note.noteCreatedAt) ?? parseTimestamp(note.createdAt),
+        createdTs:
+          parseTimestamp(note.noteCreatedAtTs) ?? parseTimestamp(note.noteCreatedAt) ?? parseTimestamp(note.createdAt),
       }));
 
       const bucket = gitlabMrsByDeveloper.get(mr.authorId) ?? [];
@@ -624,7 +630,8 @@ export async function GET(request: NextRequest) {
       const noteBucket = reviewNotesByDeveloper.get(note.authorId) ?? [];
       noteBucket.push({
         ...note,
-        createdTs: parseTimestamp(note.noteCreatedAtTs) ?? parseTimestamp(note.noteCreatedAt) ?? parseTimestamp(note.createdAt),
+        createdTs:
+          parseTimestamp(note.noteCreatedAtTs) ?? parseTimestamp(note.noteCreatedAt) ?? parseTimestamp(note.createdAt),
       });
       reviewNotesByDeveloper.set(note.authorId, noteBucket);
     }
@@ -637,6 +644,28 @@ export async function GET(request: NextRequest) {
       rangeStart: startOfDay(from),
       rangeEnd: endOfDay(to),
     });
+
+    if (summaryOnly) {
+      return NextResponse.json<{ success: true; data: DashboardInsightsResponse; error: null }>({
+        success: true,
+        data: {
+          summary: {
+            developerCount: currentMetrics.length,
+            avgComposite: roundMetric(average(currentMetrics.map((metric) => metric.composite))),
+            avgJira: roundMetric(average(currentMetrics.map((metric) => metric.jira.total))),
+            avgGitlab: roundMetric(average(currentMetrics.map((metric) => metric.gitlab.total))),
+          },
+          trend: [],
+          radar: [],
+          heatmap: [],
+          ranking: [],
+          developerDetails: [],
+          utilization: { score: 0, avgAssignedDays: 0, avgCapacityDays: 0, avgFreeDays: 0 },
+          review: { score: 0, avgComments: 0, avgReviewedMrs: 0, resolvedRate: 0 },
+        },
+        error: null,
+      });
+    }
 
     const rangeDays = Math.max(1, Math.ceil((endOfDay(to).getTime() - startOfDay(from).getTime()) / 86_400_000) + 1);
     const previousRangeEnd = endOfDay(new Date(startOfDay(from).getTime() - 86_400_000));
@@ -661,7 +690,9 @@ export async function GET(request: NextRequest) {
         to: startOfMonth(to),
       }).catch(() => []);
       const summaryByPeriod = new Map(summaryRows.map((row) => [format(row.periodStart, 'yyyy-MM'), row]));
-      const hasFullSummaryCoverage = monthRanges.every((monthDate) => summaryByPeriod.has(format(monthDate, 'yyyy-MM')));
+      const hasFullSummaryCoverage = monthRanges.every((monthDate) =>
+        summaryByPeriod.has(format(monthDate, 'yyyy-MM')),
+      );
 
       if (hasFullSummaryCoverage) {
         trend = monthRanges.map((monthDate) => {
@@ -736,8 +767,18 @@ export async function GET(request: NextRequest) {
       },
       {
         category: '공수 정확도',
-        팀평균: roundMetric(averageDefined(currentMetrics.map((metric) => metric.jira.effortAccuracy == null ? null : metric.jira.effortAccuracy * 4))),
-        상위권: roundMetric(averageDefined(topTier.map((metric) => metric.jira.effortAccuracy == null ? null : metric.jira.effortAccuracy * 4))),
+        팀평균: roundMetric(
+          averageDefined(
+            currentMetrics.map((metric) =>
+              metric.jira.effortAccuracy == null ? null : metric.jira.effortAccuracy * 4,
+            ),
+          ),
+        ),
+        상위권: roundMetric(
+          averageDefined(
+            topTier.map((metric) => (metric.jira.effortAccuracy == null ? null : metric.jira.effortAccuracy * 4)),
+          ),
+        ),
       },
       {
         category: 'MR 생산성',
@@ -758,11 +799,27 @@ export async function GET(request: NextRequest) {
 
     const metricLabels = [
       { key: 'issueCount', label: '티켓 수', pick: (metric: DeveloperRangeMetrics) => metric.activity.issueCount },
-      { key: 'doneIssueCount', label: '완료 티켓', pick: (metric: DeveloperRangeMetrics) => metric.activity.doneIssueCount },
-      { key: 'plannedEffort', label: '계획 공수', pick: (metric: DeveloperRangeMetrics) => metric.activity.plannedEffort },
-      { key: 'actualEffort', label: '실제 공수', pick: (metric: DeveloperRangeMetrics) => metric.activity.actualEffort },
+      {
+        key: 'doneIssueCount',
+        label: '완료 티켓',
+        pick: (metric: DeveloperRangeMetrics) => metric.activity.doneIssueCount,
+      },
+      {
+        key: 'plannedEffort',
+        label: '계획 공수',
+        pick: (metric: DeveloperRangeMetrics) => metric.activity.plannedEffort,
+      },
+      {
+        key: 'actualEffort',
+        label: '실제 공수',
+        pick: (metric: DeveloperRangeMetrics) => metric.activity.actualEffort,
+      },
       { key: 'mrCount', label: 'MR 수', pick: (metric: DeveloperRangeMetrics) => metric.activity.mrCount },
-      { key: 'reviewComments', label: '리뷰 댓글', pick: (metric: DeveloperRangeMetrics) => metric.activity.reviewComments },
+      {
+        key: 'reviewComments',
+        label: '리뷰 댓글',
+        pick: (metric: DeveloperRangeMetrics) => metric.activity.reviewComments,
+      },
     ] as const;
 
     const normalizedMetricValues = Object.fromEntries(
@@ -803,9 +860,10 @@ export async function GET(request: NextRequest) {
       ranking: currentMetrics.map((metric) => {
         const previousMetric = previousMetricsMap.get(metric.developerId);
         const previousComposite = previousMetric?.composite ?? 0;
-        const trend = previousComposite > 0
-          ? Math.round((((metric.composite - previousComposite) / previousComposite) * 100) * 10) / 10
-          : 0;
+        const trend =
+          previousComposite > 0
+            ? Math.round(((metric.composite - previousComposite) / previousComposite) * 100 * 10) / 10
+            : 0;
 
         return {
           id: metric.developerId,

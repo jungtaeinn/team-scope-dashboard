@@ -111,8 +111,12 @@ export async function POST(request: Request) {
       for (const dev of developers as any[]) {
         const score = scoreByDeveloper.get(dev.id);
         const breakdown = score ? safeParseBreakdown(score.breakdown) : null;
-        const jiraIssues: any[] = await prisma.jiraIssue.findMany({ where: { workspaceId, assigneeId: dev.id } });
-        const gitlabMRs: any[] = await prisma.gitlabMR.findMany({ where: { workspaceId, authorId: dev.id } });
+        const jiraIssues: any[] = await prisma.jiraIssue.findMany({
+          where: { workspaceId, assigneeId: dev.id, project: { isActive: true } },
+        });
+        const gitlabMRs: any[] = await prisma.gitlabMR.findMany({
+          where: { workspaceId, authorId: dev.id, project: { isActive: true } },
+        });
 
         sheets.push({
           name: `${dev.name} 상세`,
@@ -128,16 +132,22 @@ export async function POST(request: Request) {
 
     if (sheetKeys.includes('jiraIssues')) {
       const allIssues: any[] = await prisma.jiraIssue.findMany({
-        where: { workspaceId, assigneeId: { in: devIds } },
+        where: { workspaceId, assigneeId: { in: devIds }, project: { isActive: true } },
       });
-      sheets.push({ name: 'Jira 이슈', worksheet: buildJiraSheet(allIssues.map(toJiraParsed) as unknown as Record<string, unknown>[]) });
+      sheets.push({
+        name: 'Jira 이슈',
+        worksheet: buildJiraSheet(allIssues.map(toJiraParsed) as unknown as Record<string, unknown>[]),
+      });
     }
 
     if (sheetKeys.includes('gitlabMrs')) {
       const allMRs: any[] = await prisma.gitlabMR.findMany({
-        where: { workspaceId, authorId: { in: devIds } },
+        where: { workspaceId, authorId: { in: devIds }, project: { isActive: true } },
       });
-      sheets.push({ name: 'GitLab MR', worksheet: buildGitlabSheet(allMRs.map(toGitlabParsed) as unknown as Record<string, unknown>[]) });
+      sheets.push({
+        name: 'GitLab MR',
+        worksheet: buildGitlabSheet(allMRs.map(toGitlabParsed) as unknown as Record<string, unknown>[]),
+      });
     }
     /* eslint-enable @typescript-eslint/no-explicit-any */
 
@@ -176,8 +186,21 @@ function buildCompositeScore(
   breakdown: { jira: JiraScoreBreakdown; gitlab: GitlabScoreBreakdown } | null,
   period: string,
 ): CompositeScore {
-  const emptyJira: JiraScoreBreakdown = { ticketCompletionRate: 0, scheduleAdherence: 0, effortAccuracy: null, worklogDiligence: null, total: 0 };
-  const emptyGitlab: GitlabScoreBreakdown = { mrProductivity: 0, reviewParticipation: 0, feedbackResolution: 0, mrLeadTime: 0, ciPassRate: 0, total: 0 };
+  const emptyJira: JiraScoreBreakdown = {
+    ticketCompletionRate: 0,
+    scheduleAdherence: 0,
+    effortAccuracy: null,
+    worklogDiligence: null,
+    total: 0,
+  };
+  const emptyGitlab: GitlabScoreBreakdown = {
+    mrProductivity: 0,
+    reviewParticipation: 0,
+    feedbackResolution: 0,
+    mrLeadTime: 0,
+    ciPassRate: 0,
+    total: 0,
+  };
 
   const composite = score?.compositeScore ?? 0;
   let grade = 'F';

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryStates, parseAsString, parseAsArrayOf } from 'nuqs';
 import { cn } from '@/lib/utils';
 import { Check, RotateCcw } from 'lucide-react';
@@ -18,6 +18,10 @@ function getDefaultDateRange(): DateRange {
   return getDefaultRecentRange();
 }
 
+function areSameStringArray(left: string[], right: string[]) {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
+}
+
 export function FilterBar({ className }: FilterBarProps) {
   const [developerOptions, setDeveloperOptions] = useState<{ id: string; name: string; groupId?: string }[]>([]);
   const [projectOptions, setProjectOptions] = useState<{ id: string; name: string; type: 'Jira' | 'GitLab' }[]>([]);
@@ -33,31 +37,47 @@ export function FilterBar({ className }: FilterBarProps) {
   const [draftDevelopers, setDraftDevelopers] = useState<string[]>(params.developers);
   const [draftProjects, setDraftProjects] = useState<string[]>(params.projects);
   const [draftSearch, setDraftSearch] = useState<string>(params.search);
+  const previousDeveloperOptionIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
     const projectQuery = draftProjects.length ? `?projectIds=${draftProjects.join(',')}` : '';
+    const controller = new AbortController();
 
-    fetch(`/api/developers${projectQuery}`).then((r) => r.json()).then((json) => {
-      if (json.success && Array.isArray(json.data)) {
-        setDeveloperOptions(json.data.map((d: Record<string, unknown>) => ({
-          id: d.id as string,
-          name: d.name as string,
-          groupId: (d.groupId as string) ?? undefined,
-        })));
-      }
-    }).catch(() => {});
+    fetch(`/api/developers${projectQuery}`, { signal: controller.signal })
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          setDeveloperOptions(
+            json.data.map((d: Record<string, unknown>) => ({
+              id: d.id as string,
+              name: d.name as string,
+              groupId: (d.groupId as string) ?? undefined,
+            })),
+          );
+        }
+      })
+      .catch((error) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+      });
+
+    return () => controller.abort();
   }, [draftProjects]);
 
   useEffect(() => {
-    fetch('/api/projects').then((r) => r.json()).then((json) => {
-      if (json.success && Array.isArray(json.data)) {
-        setProjectOptions(json.data.map((p: Record<string, unknown>) => ({
-          id: p.id as string,
-          name: p.name as string,
-          type: (p.type === 'gitlab' ? 'GitLab' : 'Jira') as 'Jira' | 'GitLab',
-        })));
-      }
-    }).catch(() => {});
+    fetch('/api/projects')
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          setProjectOptions(
+            json.data.map((p: Record<string, unknown>) => ({
+              id: p.id as string,
+              name: p.name as string,
+              type: (p.type === 'gitlab' ? 'GitLab' : 'Jira') as 'Jira' | 'GitLab',
+            })),
+          );
+        }
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -69,18 +89,24 @@ export function FilterBar({ className }: FilterBarProps) {
     setDraftSearch(params.search);
   }, [params.from, params.to, params.developers, params.projects, params.search]);
 
+  const developerOptionIds = useMemo(() => developerOptions.map((developer) => developer.id), [developerOptions]);
+
   useEffect(() => {
-    if (developerOptions.length === 0) return;
-    const validDeveloperIds = new Set(developerOptions.map((developer) => developer.id));
+    const previousDeveloperOptionIds = previousDeveloperOptionIdsRef.current;
+    previousDeveloperOptionIdsRef.current = developerOptionIds;
+    if (developerOptionIds.length === 0) return;
 
-    const normalizedAppliedDevelopers = params.developers.filter((id) => validDeveloperIds.has(id));
-    if (normalizedAppliedDevelopers.length !== params.developers.length) {
-      setParams({ developers: normalizedAppliedDevelopers });
-    }
+    const validDeveloperIds = new Set(developerOptionIds);
+    setDraftDevelopers((prev) => {
+      const hadSelectedAllPreviousDevelopers =
+        previousDeveloperOptionIds.length > 0 && previousDeveloperOptionIds.every((id) => prev.includes(id));
+      const nextDevelopers = hadSelectedAllPreviousDevelopers
+        ? developerOptionIds
+        : prev.filter((id) => validDeveloperIds.has(id));
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setDraftDevelopers((prev) => prev.filter((id) => validDeveloperIds.has(id)));
-  }, [developerOptions, params.developers, setParams]);
+      return areSameStringArray(prev, nextDevelopers) ? prev : nextDevelopers;
+    });
+  }, [developerOptionIds]);
 
   const dateRange = useMemo<DateRange>(() => draftDateRange, [draftDateRange]);
 
@@ -91,17 +117,18 @@ export function FilterBar({ className }: FilterBarProps) {
 
   const hasAppliedFilters = params.developers.length > 0 || params.projects.length > 0 || params.search !== '';
   const isDirty = useMemo(() => {
-    const sameDevelopers = params.developers.length === draftDevelopers.length
-      && params.developers.every((id, idx) => id === draftDevelopers[idx]);
-    const sameProjects = params.projects.length === draftProjects.length
-      && params.projects.every((id, idx) => id === draftProjects[idx]);
+    const sameDevelopers =
+      params.developers.length === draftDevelopers.length &&
+      params.developers.every((id, idx) => id === draftDevelopers[idx]);
+    const sameProjects =
+      params.projects.length === draftProjects.length && params.projects.every((id, idx) => id === draftProjects[idx]);
 
     return !(
-      params.from === draftDateRange.from
-      && params.to === draftDateRange.to
-      && sameDevelopers
-      && sameProjects
-      && params.search === draftSearch
+      params.from === draftDateRange.from &&
+      params.to === draftDateRange.to &&
+      sameDevelopers &&
+      sameProjects &&
+      params.search === draftSearch
     );
   }, [params, draftDateRange, draftDevelopers, draftProjects, draftSearch]);
 

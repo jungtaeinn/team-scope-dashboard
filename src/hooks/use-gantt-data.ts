@@ -36,6 +36,7 @@ interface UseGanttDataOptions {
   projectIds?: string[];
   from?: string;
   to?: string;
+  enabled?: boolean;
 }
 
 /**
@@ -43,7 +44,7 @@ interface UseGanttDataOptions {
  * @param options - 개발자 ID, 기간 필터
  */
 export function useGanttData(options?: UseGanttDataOptions) {
-  const { developerIds, projectIds, from, to } = options ?? {};
+  const { developerIds, projectIds, from, to, enabled = true } = options ?? {};
 
   return useQuery<DeveloperGanttData[]>({
     queryKey: ['gantt-data', developerIds, projectIds, from, to],
@@ -63,5 +64,6 @@ export function useGanttData(options?: UseGanttDataOptions) {
       return json.data;
     },
     staleTime: 5 * 60 * 1000,
+    enabled,
   });
 }
