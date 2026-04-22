@@ -23,7 +23,9 @@ export default async function DashboardPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">팀 성과 대시보드</h1>
-          <p className="mt-1 text-sm text-[var(--muted-foreground)]">프로젝트와 담당자 기준으로 팀 성과 지표를 확인하세요</p>
+          <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+            프로젝트와 담당자 기준의 성과 흐름을 확인하고, AI가 월별 공수와 운영 포인트까지 함께 읽어줍니다.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {canExport(context.membership.role) ? <ExportDialog /> : null}

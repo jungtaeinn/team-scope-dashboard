@@ -3,11 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryStates, parseAsString, parseAsArrayOf } from 'nuqs';
 import { cn } from '@/lib/utils';
-import { Check, RotateCcw } from 'lucide-react';
+import { Check, RotateCcw, SlidersHorizontal } from 'lucide-react';
 import { DateRangeFilter, getDefaultRecentRange } from '@/components/filters/date-range-filter/DateRangeFilter';
 import { DeveloperFilter } from '@/components/filters/developer-filter/DeveloperFilter';
 import { ProjectFilter } from '@/components/filters/project-filter/ProjectFilter';
-import { SearchFilter } from '@/components/filters/search-filter/SearchFilter';
 import type { DateRange } from '@/common/types';
 
 interface FilterBarProps {
@@ -36,7 +35,6 @@ export function FilterBar({ className }: FilterBarProps) {
   const [draftDateRange, setDraftDateRange] = useState<DateRange>({ from: params.from, to: params.to });
   const [draftDevelopers, setDraftDevelopers] = useState<string[]>(params.developers);
   const [draftProjects, setDraftProjects] = useState<string[]>(params.projects);
-  const [draftSearch, setDraftSearch] = useState<string>(params.search);
   const previousDeveloperOptionIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
@@ -86,8 +84,7 @@ export function FilterBar({ className }: FilterBarProps) {
     setDraftDateRange({ from: params.from, to: params.to });
     setDraftDevelopers(params.developers);
     setDraftProjects(params.projects);
-    setDraftSearch(params.search);
-  }, [params.from, params.to, params.developers, params.projects, params.search]);
+  }, [params.from, params.to, params.developers, params.projects]);
 
   const developerOptionIds = useMemo(() => developerOptions.map((developer) => developer.id), [developerOptions]);
 
@@ -113,9 +110,10 @@ export function FilterBar({ className }: FilterBarProps) {
   const handleDateRangeChange = useCallback((range: DateRange) => setDraftDateRange(range), []);
   const handleDeveloperChange = useCallback((ids: string[]) => setDraftDevelopers(ids), []);
   const handleProjectChange = useCallback((ids: string[]) => setDraftProjects(ids), []);
-  const handleSearchChange = useCallback((value: string) => setDraftSearch(value), []);
 
   const hasAppliedFilters = params.developers.length > 0 || params.projects.length > 0 || params.search !== '';
+  const selectedDeveloperCount = draftDevelopers.length || developerOptions.length;
+  const selectedProjectCount = draftProjects.length || projectOptions.length;
   const isDirty = useMemo(() => {
     const sameDevelopers =
       params.developers.length === draftDevelopers.length &&
@@ -128,9 +126,9 @@ export function FilterBar({ className }: FilterBarProps) {
       params.to === draftDateRange.to &&
       sameDevelopers &&
       sameProjects &&
-      params.search === draftSearch
+      params.search === ''
     );
-  }, [params, draftDateRange, draftDevelopers, draftProjects, draftSearch]);
+  }, [params, draftDateRange, draftDevelopers, draftProjects]);
 
   const handleApply = useCallback(() => {
     setParams({
@@ -138,9 +136,9 @@ export function FilterBar({ className }: FilterBarProps) {
       to: draftDateRange.to,
       developers: draftDevelopers,
       projects: draftProjects,
-      search: draftSearch,
+      search: '',
     });
-  }, [setParams, draftDateRange, draftDevelopers, draftProjects, draftSearch]);
+  }, [setParams, draftDateRange, draftDevelopers, draftProjects]);
 
   const handleClearAll = useCallback(() => {
     const defaults = getDefaultDateRange();
@@ -148,51 +146,78 @@ export function FilterBar({ className }: FilterBarProps) {
     setDraftDateRange({ from: cleared.from, to: cleared.to });
     setDraftDevelopers(cleared.developers);
     setDraftProjects(cleared.projects);
-    setDraftSearch(cleared.search);
     setParams(cleared);
   }, [setParams]);
 
   return (
     <div
       className={cn(
-        'flex flex-col gap-3 rounded-xl border bg-[var(--card)] p-4 shadow-sm',
-        'md:flex-row md:items-start md:gap-4',
+        'flex flex-col gap-4 rounded-xl border bg-[var(--card)] p-4 shadow-sm',
         className,
       )}
     >
-      <DateRangeFilter value={dateRange} onChange={handleDateRangeChange} className="shrink-0" />
-      <div className="h-px bg-[var(--border)] md:h-auto md:w-px md:self-stretch" />
-      <DeveloperFilter developers={developerOptions} selectedIds={draftDevelopers} onChange={handleDeveloperChange} />
-      <div className="h-px bg-[var(--border)] md:h-auto md:w-px md:self-stretch" />
-      <ProjectFilter projects={projectOptions} selectedIds={draftProjects} onChange={handleProjectChange} />
-      <div className="h-px bg-[var(--border)] md:h-auto md:w-px md:self-stretch" />
-      <SearchFilter value={draftSearch} onChange={handleSearchChange} className="min-w-0 flex-1" />
+      <div className="grid gap-3 lg:grid-cols-[minmax(18rem,1.15fr)_minmax(15rem,1fr)_minmax(15rem,1fr)_minmax(13rem,0.82fr)] lg:items-stretch">
+        <div className="rounded-lg border bg-[var(--card)] p-3">
+          <DateRangeFilter value={dateRange} onChange={handleDateRangeChange} className="w-full" />
+        </div>
+        <DeveloperFilter
+          developers={developerOptions}
+          selectedIds={draftDevelopers}
+          onChange={handleDeveloperChange}
+          className="w-full"
+        />
+        <ProjectFilter
+          projects={projectOptions}
+          selectedIds={draftProjects}
+          onChange={handleProjectChange}
+          className="w-full"
+        />
+        <div className="flex flex-col justify-between gap-3 rounded-lg border bg-[var(--card)] p-3">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <SlidersHorizontal className="h-4 w-4 text-[var(--muted-foreground)]" />
+              <span className="text-xs font-medium text-[var(--card-foreground)]">필터 적용</span>
+            </div>
+            <div className="grid gap-2">
+              <div className="flex h-9 items-center justify-between rounded-lg border bg-[var(--background)]/45 px-3 text-xs">
+                <span className="text-[var(--muted-foreground)]">개발자</span>
+                <span className="font-medium text-[var(--foreground)]">{selectedDeveloperCount}</span>
+              </div>
+              <div className="flex h-9 items-center justify-between rounded-lg border bg-[var(--background)]/45 px-3 text-xs">
+                <span className="text-[var(--muted-foreground)]">프로젝트</span>
+                <span className="font-medium text-[var(--foreground)]">{selectedProjectCount}</span>
+              </div>
+            </div>
+          </div>
+          <div className={cn('grid gap-2', hasAppliedFilters && 'sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2')}>
+            <button
+              type="button"
+              onClick={handleApply}
+              disabled={!isDirty}
+              className={cn(
+                'inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border px-4 text-xs font-medium transition-colors',
+                isDirty
+                  ? 'border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/20'
+                  : 'cursor-not-allowed text-[var(--muted-foreground)] opacity-60',
+              )}
+            >
+              <Check className="h-3.5 w-3.5" />
+              반영
+            </button>
 
-      <button
-        type="button"
-        onClick={handleApply}
-        disabled={!isDirty}
-        className={cn(
-          'inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
-          isDirty
-            ? 'border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/20'
-            : 'cursor-not-allowed text-[var(--muted-foreground)] opacity-60',
-        )}
-      >
-        <Check className="h-3.5 w-3.5" />
-        반영
-      </button>
-
-      {hasAppliedFilters && (
-        <button
-          type="button"
-          onClick={handleClearAll}
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600"
-        >
-          <RotateCcw className="h-3.5 w-3.5" />
-          초기화
-        </button>
-      )}
+            {hasAppliedFilters && (
+              <button
+                type="button"
+                onClick={handleClearAll}
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border px-4 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:hover:border-red-900/60 dark:hover:bg-red-950/30 dark:hover:text-red-300"
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                초기화
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

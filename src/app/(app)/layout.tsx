@@ -1,5 +1,6 @@
 import { Sidebar } from '@/components/_ui';
 import { AppHeader } from '@/components/_ui/app-header';
+import { FloatingPromptBar } from '@/components/_ui/floating-prompt';
 import { ChangelogAutoOpen } from '@/components/changelog/ChangelogAutoOpen';
 import { AutoSyncOnLogin } from '@/components/sync';
 import { canManageData, getVisibleNavItems } from '@/lib/auth/roles';
@@ -24,8 +25,9 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           workspaceId={context.workspace.id}
           sessionId={context.session.id}
         />
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">{children}</div>
+        <div className="mx-auto max-w-7xl px-4 pb-28 pt-6 sm:px-6 lg:px-8">{children}</div>
       </main>
+      <FloatingPromptBar />
       <ChangelogAutoOpen version={APP_VERSION} />
     </>
   );

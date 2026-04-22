@@ -4,13 +4,14 @@ import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { Users, FolderGit2, Layers, SlidersHorizontal } from 'lucide-react';
+import { Bot, Users, FolderGit2, Layers, SlidersHorizontal } from 'lucide-react';
 
 /** 탭 정의 */
 const TABS = [
   { id: 'projects', label: '프로젝트 관리', icon: FolderGit2 },
   { id: 'groups', label: '그룹 관리', icon: Layers },
   { id: 'scoring', label: '스코어링 가중치', icon: SlidersHorizontal },
+  { id: 'ai', label: 'AI 관리', icon: Bot, separated: true },
   { id: 'members', label: '계정 관리', icon: Users },
 ] as const;
 
@@ -52,6 +53,10 @@ const TAB_COMPONENTS: Record<TabId, React.ComponentType> = {
     () => import('@/components/settings/_components/ScoringWeightSlider').then((module) => module.ScoringWeightSlider),
     { loading: () => <SettingsTabSkeleton /> },
   ),
+  ai: dynamic(
+    () => import('@/components/settings/_components/AIManagementForm').then((module) => module.AIManagementForm),
+    { loading: () => <SettingsTabSkeleton /> },
+  ),
 };
 
 /**
@@ -83,12 +88,12 @@ export default function SettingsPage() {
       {/* 탭 네비게이션 */}
       <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
         <nav className="-mb-px flex space-x-6 overflow-x-auto" aria-label="설정 탭">
-          {TABS.map((tab, index) => {
+          {TABS.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
-              <div key={tab.id} className={cn('flex items-center', index === TABS.length - 1 && 'gap-6')}>
-                {index === TABS.length - 1 ? (
+              <div key={tab.id} className={cn('flex items-center', 'separated' in tab && tab.separated && 'gap-6')}>
+                {'separated' in tab && tab.separated ? (
                   <span className="h-6 w-px shrink-0 bg-gray-200 dark:bg-gray-700" aria-hidden="true" />
                 ) : null}
                 <button

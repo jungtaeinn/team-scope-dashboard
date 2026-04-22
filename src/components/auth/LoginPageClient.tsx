@@ -238,11 +238,11 @@ export function LoginPageClient({
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold">실행 화면 데모</p>
                     <p className="mt-1 truncate whitespace-nowrap text-[11px] text-[var(--muted-foreground)] sm:text-xs">
-                      대시보드, Gantt, 개발자 상세, 설정, Test 화면이 자연스럽게 반복됩니다.
+                      대시보드, Gantt, AI 월별 분석, 개발자 상세, 설정, Test 화면이 자연스럽게 반복됩니다.
                     </p>
                   </div>
                   <div className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border bg-[var(--muted)]/40 px-2 py-1 text-[10px] font-medium text-[var(--muted-foreground)] sm:px-2.5 sm:text-[11px]">
-                    Dashboard / Gantt / Developer / Settings / Test
+                    Dashboard / Gantt / AI Agent / Developer / Settings / Test
                   </div>
                 </div>
                 <div className="bg-[#0a0d14] p-3">

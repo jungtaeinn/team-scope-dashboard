@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState, useSyncExternalStore, type ComponentType, type MouseEvent } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -184,10 +185,31 @@ export function Sidebar({ navigationItems, version, role }: SidebarProps) {
             isCollapsed ? 'justify-center px-3' : 'gap-2.5 px-5',
           )}
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--primary)] text-sm font-bold text-[var(--primary-foreground)]">
-            T
-          </div>
-          {!isCollapsed ? <span className="text-lg font-bold tracking-tight">TeamScope</span> : null}
+          <Image
+            src="/icons/icon_128x128@2x.png"
+            alt="TeamScope"
+            width={32}
+            height={32}
+            priority
+            className="h-8 w-8 shrink-0 rounded-lg"
+          />
+          {!isCollapsed ? (
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="shrink-0 text-lg font-bold tracking-tight">TeamScope</span>
+              <span
+                className={cn(
+                  'inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5',
+                  'border-orange-300/70 bg-orange-400/15 text-[10px] font-bold tracking-tight text-orange-100',
+                  'shadow-[0_0_10px_rgba(251,146,60,0.62),0_0_26px_rgba(245,158,11,0.42),inset_0_1px_0_rgba(255,255,255,0.22)]',
+                  'ring-1 ring-orange-300/35',
+                )}
+                title="Powered by Analyst AI"
+              >
+                <span className="text-orange-200/80">+</span>
+                AI
+              </span>
+            </div>
+          ) : null}
         </div>
 
         {/* 네비게이션 */}

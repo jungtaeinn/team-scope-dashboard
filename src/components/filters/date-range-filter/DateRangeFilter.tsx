@@ -152,20 +152,20 @@ export function DateRangeFilter({ value, onChange, className }: DateRangeFilterP
         ))}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
         <Calendar className="h-4 w-4 shrink-0 text-[var(--muted-foreground)]" />
         <input
           type="date"
           value={value.from}
           onChange={handleFromChange}
-          className="h-8 rounded-md border bg-[var(--background)] px-2 text-xs text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+          className="h-8 min-w-0 rounded-md border bg-[var(--background)] px-2 text-xs text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
         />
         <span className="text-xs text-[var(--muted-foreground)]">~</span>
         <input
           type="date"
           value={value.to}
           onChange={handleToChange}
-          className="h-8 rounded-md border bg-[var(--background)] px-2 text-xs text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+          className="h-8 min-w-0 rounded-md border bg-[var(--background)] px-2 text-xs text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
         />
       </div>
     </div>

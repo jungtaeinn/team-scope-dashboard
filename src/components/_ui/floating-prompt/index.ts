@@ -1,0 +1,1 @@
+export { FloatingPromptBar } from './FloatingPromptBar';
