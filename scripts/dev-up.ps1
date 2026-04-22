@@ -143,6 +143,6 @@ Write-Log "기본 데이터를 시드합니다"
 node --experimental-strip-types prisma/seed.ts
 
 Write-Log "개발 서버를 시작합니다"
-Write-Log "로그인: owner@example.com / ChangeMe123!"
+Write-Log "로그인: .env.local 의 BOOTSTRAP_OWNER_EMAIL / BOOTSTRAP_OWNER_PASSWORD"
 pnpm dev
 Pop-Location

@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './load-env.mjs';
 import { execFileSync } from 'node:child_process';
 import { Client } from 'pg';
 

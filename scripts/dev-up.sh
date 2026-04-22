@@ -21,10 +21,14 @@ print_install_help() {
 
 [TeamScope] 로컬 실행에 필요한 도구가 부족합니다.
 
+- Homebrew가 없다면 먼저 설치:
+  /bin/bash -c "\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 - Node.js 20 이상: https://nodejs.org/
 - Docker Desktop: https://www.docker.com/products/docker-desktop/
 - pnpm: Node 설치 후 corepack으로 자동 활성화 가능
-- macOS에서 Colima를 쓰고 싶다면: brew install colima
+- macOS에서 Colima를 쓰고 싶다면:
+  brew install docker colima
+  colima start
 
 Windows 사용자는 PowerShell에서 아래 스크립트를 권장합니다.
   .\\scripts\\dev-up.ps1
@@ -44,7 +48,6 @@ require_command() {
   fi
 }
 
-require_command colima
 require_command node
 require_command docker
 
@@ -155,6 +158,6 @@ log "기본 데이터를 시드합니다"
 (cd "$ROOT_DIR" && node --experimental-strip-types prisma/seed.ts)
 
 log "개발 서버를 시작합니다"
-log "로그인: owner@example.com / ChangeMe123!"
+log "로그인: .env.local 의 BOOTSTRAP_OWNER_EMAIL / BOOTSTRAP_OWNER_PASSWORD"
 cd "$ROOT_DIR"
 exec pnpm dev

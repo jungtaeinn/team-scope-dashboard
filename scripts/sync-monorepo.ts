@@ -1,11 +1,7 @@
-import dotenv from 'dotenv';
+import './load-env.mjs';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
-import path from 'node:path';
 import { DEFAULT_WORKSPACE_ID } from '@/lib/app-info';
-
-dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
 
 function ensureEnv(name: string): string {
   const value = process.env[name]?.trim();

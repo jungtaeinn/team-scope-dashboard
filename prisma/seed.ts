@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import '../scripts/load-env.mjs';
 import { randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
