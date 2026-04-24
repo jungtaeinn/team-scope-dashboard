@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireApiContext } from '@/lib/auth/api';
 import { prisma } from '@/lib/db';
 import { refreshDashboardMonthlySummaryView } from '@/lib/db/dashboard-monthly-summary';
+import { readOptionalJsonBody } from '@/lib/http/json-body';
 import { cleanupProjectData } from '@/lib/projects/cleanup-project-data';
 import { ensureEnvProjects } from '@/lib/projects/ensure-env-projects';
 import { getProjectReadRoles } from '@/lib/projects/project-api-access';
@@ -108,14 +109,22 @@ export async function POST(request: NextRequest) {
     const authResult = await requireApiContext(request, ['owner', 'maintainer']);
     if (!authResult.ok) return authResult.response;
 
-    const body = (await request.json()) as ProjectBody;
+    const parsedBody = await readOptionalJsonBody<ProjectBody>(request);
+    if (!parsedBody.ok) {
+      return NextResponse.json(
+        { success: false, data: null, error: '요청 본문 JSON 형식이 올바르지 않습니다.' },
+        { status: 400 },
+      );
+    }
+
+    const body: Partial<ProjectBody> = parsedBody.body ?? {};
     const workspaceId = authResult.context.workspace.id;
 
     if (!body.name?.trim()) {
       return NextResponse.json({ success: false, data: null, error: '프로젝트 이름은 필수입니다.' }, { status: 400 });
     }
 
-    if (!body.type || !['jira', 'gitlab'].includes(body.type)) {
+    if (body.type !== 'jira' && body.type !== 'gitlab') {
       return NextResponse.json(
         { success: false, data: null, error: '유효한 프로젝트 유형(jira/gitlab)을 지정하세요.' },
         { status: 400 },
@@ -126,8 +135,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, data: null, error: 'URL은 필수입니다.' }, { status: 400 });
     }
 
+    const projectName = body.name.trim();
+    const projectType = body.type;
+    const projectBaseUrl = body.baseUrl.trim();
     const normalizedProjectKey = normalizeProjectKey(body.projectKey);
-    const normalizedBaseUrl = normalizeProjectBaseUrl(body.type, body.baseUrl, normalizedProjectKey);
+    const normalizedBaseUrl = normalizeProjectBaseUrl(projectType, projectBaseUrl, normalizedProjectKey);
 
     let project;
 
@@ -145,15 +157,15 @@ export async function POST(request: NextRequest) {
       }
 
       const updateData: Record<string, unknown> = {
-        name: body.name.trim(),
-        type: body.type,
-        baseUrl: normalizedBaseUrl,
-        projectKey: normalizedProjectKey,
-      };
+          name: projectName,
+          type: projectType,
+          baseUrl: normalizedBaseUrl,
+          projectKey: normalizedProjectKey,
+        };
 
       const duplicate = await findProjectByIdentity(prisma, {
         workspaceId,
-        type: body.type,
+        type: projectType,
         baseUrl: normalizedBaseUrl,
         projectKey: normalizedProjectKey,
         isActive: true,
@@ -195,7 +207,7 @@ export async function POST(request: NextRequest) {
 
       const duplicate = await findProjectByIdentity(prisma, {
         workspaceId,
-        type: body.type,
+        type: projectType,
         baseUrl: normalizedBaseUrl,
         projectKey: normalizedProjectKey,
         isActive: true,
@@ -211,8 +223,8 @@ export async function POST(request: NextRequest) {
       project = await prisma.project.create({
         data: {
           workspaceId,
-          name: body.name.trim(),
-          type: body.type,
+          name: projectName,
+          type: projectType,
           baseUrl: normalizedBaseUrl,
           token: body.token,
           projectKey: normalizedProjectKey,

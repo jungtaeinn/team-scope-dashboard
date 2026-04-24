@@ -5,6 +5,7 @@ import { createJiraClient, fetchProjectIssues } from '@/lib/jira';
 import { createGitlabClient, GitlabApiError } from '@/lib/gitlab';
 import { getGitlabApiOrigin, getGitlabGroupPathFromUrl, getGitlabProjectPathFromUrl } from '@/lib/gitlab/url';
 import { resolveDefaultGroupId } from '@/lib/groups/default-grouping';
+import { readOptionalJsonBody } from '@/lib/http/json-body';
 import { createExternalApiRequestInit } from '@/lib/network/external-api';
 import {
   analyzeDeveloperIdentityMatch,
@@ -690,7 +691,15 @@ export async function POST(request: NextRequest) {
     if (!authResult.ok) return authResult.response;
 
     const workspaceId = authResult.context.workspace.id;
-    const body = (await request.json()) as SaveProjectMembersBody;
+    const parsedBody = await readOptionalJsonBody<SaveProjectMembersBody>(request);
+    if (!parsedBody.ok) {
+      return NextResponse.json(
+        { success: false, data: null, error: '요청 본문 JSON 형식이 올바르지 않습니다.' },
+        { status: 400 },
+      );
+    }
+
+    const body = parsedBody.body ?? {};
     const projectId = body.projectId?.trim();
     const candidates = body.candidates ?? [];
 

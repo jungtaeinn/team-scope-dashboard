@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiContext } from '@/lib/auth/api';
 import { prisma } from '@/lib/db';
+import { readOptionalJsonBody } from '@/lib/http/json-body';
 
 interface GroupBody {
   id?: string;
@@ -47,7 +48,15 @@ export async function POST(request: NextRequest) {
     const authResult = await requireApiContext(request, ['owner', 'maintainer']);
     if (!authResult.ok) return authResult.response;
 
-    const body = (await request.json()) as GroupBody;
+    const parsedBody = await readOptionalJsonBody<GroupBody>(request);
+    if (!parsedBody.ok) {
+      return NextResponse.json(
+        { success: false, data: null, error: '요청 본문 JSON 형식이 올바르지 않습니다.' },
+        { status: 400 },
+      );
+    }
+
+    const body = parsedBody.body ?? { name: '' };
     if (!body.name?.trim()) {
       return NextResponse.json(
         { success: false, data: null, error: '그룹 이름은 필수입니다.' },

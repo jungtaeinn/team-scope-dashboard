@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireApiContext } from '@/lib/auth/api';
 import { testAiConnection } from '@/lib/ai/connection-test';
 import { getAiSetting, isAiProvider, toAiSettingView, updateAiTestResult, type AiProvider } from '@/lib/ai/settings';
+import { readOptionalJsonBody } from '@/lib/http/json-body';
 
 interface AiConnectionTestBody {
   provider?: AiProvider;
@@ -13,7 +14,15 @@ export async function POST(request: NextRequest) {
     const authResult = await requireApiContext(request, ['owner', 'maintainer']);
     if (!authResult.ok) return authResult.response;
 
-    const body = (await request.json()) as AiConnectionTestBody;
+    const parsedBody = await readOptionalJsonBody<AiConnectionTestBody>(request);
+    if (!parsedBody.ok) {
+      return NextResponse.json(
+        { success: false, data: null, error: '요청 본문 JSON 형식이 올바르지 않습니다.' },
+        { status: 400 },
+      );
+    }
+
+    const body = parsedBody.body ?? {};
     if (!isAiProvider(body.provider)) {
       return NextResponse.json(
         { success: false, data: null, error: '유효한 AI 제공자를 선택해 주세요.' },

@@ -7,6 +7,7 @@ import {
   getGitlabProjectPathFromUrl,
   normalizeGitlabProjectBaseUrl,
 } from '@/lib/gitlab/url';
+import { readOptionalJsonBody } from '@/lib/http/json-body';
 import { createExternalApiRequestInit } from '@/lib/network/external-api';
 import { resolveEnvProjectToken } from '@/lib/projects/ensure-env-projects';
 
@@ -126,7 +127,15 @@ export async function POST(request: Request) {
     if (!authResult.ok) return authResult.response;
 
     const workspaceId = authResult.context.workspace.id;
-    const body = (await request.json()) as Partial<TestConnectionBody>;
+    const parsedBody = await readOptionalJsonBody<Partial<TestConnectionBody>>(request);
+    if (!parsedBody.ok) {
+      return NextResponse.json(
+        { success: false, error: '요청 본문 JSON 형식이 올바르지 않습니다.', details: null },
+        { status: 400 },
+      );
+    }
+
+    const body = parsedBody.body ?? {};
 
     let resolvedBody = body as TestConnectionBody;
 

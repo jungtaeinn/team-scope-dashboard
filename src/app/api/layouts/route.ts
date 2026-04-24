@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiContext } from '@/lib/auth/api';
 import { prisma } from '@/lib/db';
+import { readOptionalJsonBody } from '@/lib/http/json-body';
 
 /** 레이아웃 저장 요청 바디 */
 interface LayoutBody {
@@ -54,7 +55,15 @@ export async function POST(request: NextRequest) {
     const authResult = await requireApiContext(request, ['owner', 'maintainer']);
     if (!authResult.ok) return authResult.response;
 
-    const body = (await request.json()) as LayoutBody;
+    const parsedBody = await readOptionalJsonBody<LayoutBody>(request);
+    if (!parsedBody.ok) {
+      return NextResponse.json(
+        { success: false, data: null, error: '요청 본문 JSON 형식이 올바르지 않습니다.' },
+        { status: 400 },
+      );
+    }
+
+    const body = parsedBody.body ?? { name: '', widgets: [] };
     const workspaceId = authResult.context.workspace.id;
 
     if (!body.name?.trim()) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireApiContext } from '@/lib/auth/api';
 import { runTeamScopeAgent } from '@/lib/ai/agent/orchestrator';
+import { readOptionalJsonBody } from '@/lib/http/json-body';
 
 interface AiAgentRequestBody {
   prompt?: string;
@@ -46,7 +47,15 @@ export async function POST(request: NextRequest) {
     const authResult = await requireApiContext(request);
     if (!authResult.ok) return authResult.response;
 
-    const body = (await request.json()) as AiAgentRequestBody;
+    const parsedBody = await readOptionalJsonBody<AiAgentRequestBody>(request);
+    if (!parsedBody.ok) {
+      return NextResponse.json(
+        { success: false, data: null, error: '요청 본문 JSON 형식이 올바르지 않습니다.' },
+        { status: 400 },
+      );
+    }
+
+    const body = parsedBody.body ?? {};
     const prompt = body.prompt?.trim() ?? '';
 
     if (!prompt) {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireApiContext } from '@/lib/auth/api';
 import { prisma } from '@/lib/db';
+import { readOptionalJsonBody } from '@/lib/http/json-body';
 import {
   buildTeamSummarySheet,
   buildDeveloperDetailSheet,
@@ -65,7 +66,15 @@ export async function POST(request: Request) {
     const authResult = await requireApiContext(request, ['owner', 'maintainer', 'reporter']);
     if (!authResult.ok) return authResult.response;
 
-    const body = (await request.json()) as ExportRequestBody;
+    const parsedBody = await readOptionalJsonBody<ExportRequestBody>(request);
+    if (!parsedBody.ok) {
+      return NextResponse.json(
+        { success: false, data: null, error: '요청 본문 JSON 형식이 올바르지 않습니다.' },
+        { status: 400 },
+      );
+    }
+
+    const body = parsedBody.body ?? { scope: 'team' };
     const workspaceId = authResult.context.workspace.id;
     const period = body.period ?? new Date().toISOString().slice(0, 7);
     const sheetKeys = body.sheets ?? ['teamSummary', 'developerDetail', 'jiraIssues', 'gitlabMrs'];
