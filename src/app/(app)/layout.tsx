@@ -6,10 +6,20 @@ import { AutoSyncOnLogin } from '@/components/sync';
 import { canManageData, getVisibleNavItems } from '@/lib/auth/roles';
 import { requireServerWorkspaceContext } from '@/lib/auth/session';
 import { APP_VERSION } from '@/lib/app-info';
+import { prisma } from '@/lib/db';
 
 export default async function AppLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   const context = await requireServerWorkspaceContext();
   const navigationItems = getVisibleNavItems(context.membership.role);
+  const syncableProjectCount = canManageData(context.membership.role)
+    ? await prisma.project.count({
+        where: {
+          workspaceId: context.workspace.id,
+          isActive: true,
+          token: { not: 'PENDING_TOKEN' },
+        },
+      })
+    : 0;
 
   return (
     <>
@@ -21,7 +31,7 @@ export default async function AppLayout({ children }: Readonly<{ children: React
           showSyncButton={canManageData(context.membership.role)}
         />
         <AutoSyncOnLogin
-          enabled={canManageData(context.membership.role)}
+          enabled={canManageData(context.membership.role) && syncableProjectCount > 0}
           workspaceId={context.workspace.id}
           sessionId={context.session.id}
         />

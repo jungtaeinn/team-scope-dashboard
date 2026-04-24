@@ -1,13 +1,7 @@
 import { prisma } from '@/lib/db';
 import { DEFAULT_WORKSPACE_ID } from '@/lib/app-info';
-
-interface EnvProjectConfig {
-  type: 'jira' | 'gitlab';
-  name: string;
-  baseUrl: string;
-  token: string;
-  projectKey: string;
-}
+import { readEnvProjects } from '@/lib/projects/env-project-config';
+import { findProjectByIdentity } from '@/lib/projects/project-identity';
 
 const ENSURE_TTL_MS = 60_000;
 const ensureTimestamps = new Map<string, number>();
@@ -20,38 +14,6 @@ function getComparableOrigin(value: string | undefined) {
   } catch {
     return value.trim().replace(/\/+$/, '').toLowerCase();
   }
-}
-
-function readEnvProjects(): EnvProjectConfig[] {
-  const configs: EnvProjectConfig[] = [];
-
-  const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim();
-  const jiraToken = process.env.JIRA_PAT?.trim();
-  const jiraProjectKey = process.env.JIRA_PROJECT_KEY?.trim();
-  if (jiraBaseUrl && jiraToken && jiraProjectKey) {
-    configs.push({
-      type: 'jira',
-      name: 'ENV Jira Project',
-      baseUrl: jiraBaseUrl,
-      token: jiraToken,
-      projectKey: jiraProjectKey,
-    });
-  }
-
-  const gitlabBaseUrl = process.env.GITLAB_BASE_URL?.trim();
-  const gitlabToken = process.env.GITLAB_PAT?.trim();
-  const gitlabProjectId = process.env.GITLAB_PROJECT_ID?.trim();
-  if (gitlabBaseUrl && gitlabToken && gitlabProjectId) {
-    configs.push({
-      type: 'gitlab',
-      name: 'ENV GitLab Project',
-      baseUrl: gitlabBaseUrl,
-      token: gitlabToken,
-      projectKey: gitlabProjectId,
-    });
-  }
-
-  return configs;
 }
 
 export function resolveEnvProjectToken(type: 'jira' | 'gitlab', baseUrl: string) {
@@ -90,15 +52,20 @@ export async function ensureEnvProjects(workspaceId = DEFAULT_WORKSPACE_ID) {
 
   const ensurePromise = (async () => {
     for (const config of envProjects) {
-      const existing = await prisma.project.findFirst({
-        where: {
+      const existing =
+        (await findProjectByIdentity(prisma, {
           workspaceId,
           type: config.type,
           baseUrl: config.baseUrl,
           projectKey: config.projectKey,
-        },
-        select: { id: true, name: true },
-      });
+          isActive: true,
+        })) ??
+        (await findProjectByIdentity(prisma, {
+          workspaceId,
+          type: config.type,
+          baseUrl: config.baseUrl,
+          projectKey: config.projectKey,
+        }));
 
       if (existing) {
         await prisma.project.update({

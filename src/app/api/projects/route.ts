@@ -4,7 +4,12 @@ import { prisma } from '@/lib/db';
 import { refreshDashboardMonthlySummaryView } from '@/lib/db/dashboard-monthly-summary';
 import { cleanupProjectData } from '@/lib/projects/cleanup-project-data';
 import { ensureEnvProjects } from '@/lib/projects/ensure-env-projects';
-import { normalizeGitlabProjectBaseUrl } from '@/lib/gitlab/url';
+import { getProjectReadRoles } from '@/lib/projects/project-api-access';
+import {
+  findProjectByIdentity,
+  normalizeProjectBaseUrl,
+  normalizeProjectKey,
+} from '@/lib/projects/project-identity';
 
 /** 프로젝트 생성/수정 요청 바디 */
 interface ProjectBody {
@@ -28,12 +33,45 @@ interface ProjectBody {
  */
 export async function GET(request: NextRequest) {
   try {
-    const authResult = await requireApiContext(request);
+    const { searchParams } = request.nextUrl;
+    const id = searchParams.get('id');
+    const includeToken = searchParams.get('includeToken') === 'true';
+    const authResult = await requireApiContext(request, getProjectReadRoles(includeToken));
     if (!authResult.ok) return authResult.response;
 
     const workspaceId = authResult.context.workspace.id;
 
     await ensureEnvProjects(workspaceId);
+
+    if (includeToken) {
+      if (!id) {
+        return NextResponse.json({ success: false, data: null, error: '프로젝트 ID가 필요합니다.' }, { status: 400 });
+      }
+
+      const project = await prisma.project.findFirst({
+        where: { id, workspaceId, isActive: true },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          baseUrl: true,
+          token: true,
+          projectKey: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+
+      if (!project) {
+        return NextResponse.json(
+          { success: false, data: null, error: '프로젝트를 찾을 수 없습니다.' },
+          { status: 404 },
+        );
+      }
+
+      return NextResponse.json({ success: true, data: project, error: null });
+    }
 
     const projects = await prisma.project.findMany({
       where: { workspaceId, isActive: true },
@@ -88,8 +126,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, data: null, error: 'URL은 필수입니다.' }, { status: 400 });
     }
 
-    const normalizedBaseUrl =
-      body.type === 'gitlab' ? normalizeGitlabProjectBaseUrl(body.baseUrl, body.projectKey) : body.baseUrl.trim();
+    const normalizedProjectKey = normalizeProjectKey(body.projectKey);
+    const normalizedBaseUrl = normalizeProjectBaseUrl(body.type, body.baseUrl, normalizedProjectKey);
 
     let project;
 
@@ -110,8 +148,24 @@ export async function POST(request: NextRequest) {
         name: body.name.trim(),
         type: body.type,
         baseUrl: normalizedBaseUrl,
-        projectKey: body.projectKey?.trim() || null,
+        projectKey: normalizedProjectKey,
       };
+
+      const duplicate = await findProjectByIdentity(prisma, {
+        workspaceId,
+        type: body.type,
+        baseUrl: normalizedBaseUrl,
+        projectKey: normalizedProjectKey,
+        isActive: true,
+        excludeId: body.id,
+      });
+
+      if (duplicate) {
+        return NextResponse.json(
+          { success: false, data: null, error: `이미 등록된 프로젝트입니다: ${duplicate.name}` },
+          { status: 409 },
+        );
+      }
 
       if (body.token) {
         updateData.token = body.token;
@@ -139,6 +193,21 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      const duplicate = await findProjectByIdentity(prisma, {
+        workspaceId,
+        type: body.type,
+        baseUrl: normalizedBaseUrl,
+        projectKey: normalizedProjectKey,
+        isActive: true,
+      });
+
+      if (duplicate) {
+        return NextResponse.json(
+          { success: false, data: null, error: `이미 등록된 프로젝트입니다: ${duplicate.name}` },
+          { status: 409 },
+        );
+      }
+
       project = await prisma.project.create({
         data: {
           workspaceId,
@@ -146,7 +215,7 @@ export async function POST(request: NextRequest) {
           type: body.type,
           baseUrl: normalizedBaseUrl,
           token: body.token,
-          projectKey: body.projectKey?.trim() || null,
+          projectKey: normalizedProjectKey,
         },
         select: {
           id: true,

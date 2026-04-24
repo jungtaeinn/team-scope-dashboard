@@ -7,6 +7,7 @@ import type {
   GetPipelinesOptions,
 } from './_types';
 import { getGitlabApiOrigin } from './url';
+import { createExternalApiRequestInit } from '../network/external-api';
 
 /** GitLab API 요청 실패 시 발생하는 커스텀 에러 */
 export class GitlabApiError extends Error {
@@ -94,12 +95,15 @@ export function createGitlabClient(config: GitlabConfig): GitlabClient {
   async function request(endpoint: string): Promise<Response> {
     const url = endpoint.startsWith('http') ? endpoint : `${apiBase}${endpoint}`;
 
-    const response = await fetch(url, {
-      headers: {
-        'PRIVATE-TOKEN': token,
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await fetch(
+      url,
+      createExternalApiRequestInit({
+        headers: {
+          'PRIVATE-TOKEN': token,
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
 
     if (!response.ok) {
       const errorBody = await response.text().catch(() => 'Unknown error');

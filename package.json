@@ -5,13 +5,18 @@
   "version": "0.9.0",
   "license": "Apache-2.0",
   "private": true,
+  "engines": {
+    "node": ">=22.6.0"
+  },
   "packageManager": "pnpm@10.21.0",
   "scripts": {
+    "check:node": "node scripts/check-node-version.mjs",
     "dev": "next dev --webpack",
     "db:observability": "node --experimental-strip-types scripts/enable-pg-observability.ts",
     "db:pgstat": "node --experimental-strip-types scripts/report-pg-slow-queries.ts",
     "db:normalize-dates": "node --experimental-strip-types scripts/normalize-db-dates.ts",
     "db:optimize": "node --experimental-strip-types scripts/apply-performance-indexes.ts",
+    "db:projects:repair": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/repair-project-identities.ts",
     "db:analytics:init": "node --experimental-strip-types scripts/setup-dashboard-materialized-view.ts",
     "db:analytics:refresh": "node --experimental-strip-types scripts/refresh-dashboard-materialized-view.ts",
     "dev:mac": "bash ./scripts/dev-up.sh",
@@ -20,7 +25,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:flow-lab": "node --experimental-strip-types --experimental-specifier-resolution=node --test src/lib/flow-lab/*.test.ts"
+    "test:flow-lab": "node --experimental-strip-types --experimental-specifier-resolution=node --test src/lib/flow-lab/*.test.ts",
+    "test:projects": "node --experimental-strip-types --experimental-specifier-resolution=node --test src/lib/projects/*.test.ts"
   },
   "dependencies": {
     "@better-auth/passkey": "1.5.6",

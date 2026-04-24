@@ -159,6 +159,7 @@ model Project {
 
   @@index([workspaceId, isActive])
   @@index([workspaceId, type])
+  @@index([workspaceId, type, baseUrl, projectKey])
 }
 
 /// 개발자 정보

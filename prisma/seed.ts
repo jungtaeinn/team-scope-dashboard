@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
 import { hash as hashArgon2 } from '@node-rs/argon2';
+import { readEnvProjects } from '../src/lib/projects/env-project-config.ts';
 
 const connectionString = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/team_scope?schema=public';
 const adapter = new PrismaPg({ connectionString });
@@ -30,6 +31,96 @@ const DEFAULT_WORKSPACE_SLUG = 'default-workspace';
 const DEFAULT_OWNER_EMAIL = 'owner@example.com';
 const DEFAULT_OWNER_NAME = 'TeamScope Owner';
 const DEFAULT_OWNER_PASSWORD = 'ChangeMe123!';
+
+function buildProjectIdentityKey(project: {
+  workspaceId: string;
+  type: string;
+  baseUrl: string;
+  projectKey: string | null;
+}) {
+  return JSON.stringify([project.workspaceId, project.type, project.baseUrl, project.projectKey?.trim() || null]);
+}
+
+function compareProjectCandidates(
+  left: { id: string; isActive: boolean; createdAt: Date; updatedAt: Date },
+  right: { id: string; isActive: boolean; createdAt: Date; updatedAt: Date },
+) {
+  if (left.isActive !== right.isActive) return left.isActive ? -1 : 1;
+
+  const updatedDiff = right.updatedAt.getTime() - left.updatedAt.getTime();
+  if (updatedDiff !== 0) return updatedDiff;
+
+  const createdDiff = right.createdAt.getTime() - left.createdAt.getTime();
+  if (createdDiff !== 0) return createdDiff;
+
+  return right.id.localeCompare(left.id);
+}
+
+async function repairActiveProjectIdentityDuplicates() {
+  const projects = await prisma.project.findMany({
+    select: {
+      id: true,
+      workspaceId: true,
+      type: true,
+      baseUrl: true,
+      projectKey: true,
+      isActive: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }, { id: 'desc' }],
+  });
+
+  const grouped = new Map<string, typeof projects>();
+  for (const project of projects) {
+    const key = buildProjectIdentityKey(project);
+    const bucket = grouped.get(key);
+    if (bucket) {
+      bucket.push(project);
+    } else {
+      grouped.set(key, [project]);
+    }
+  }
+
+  let repairedCount = 0;
+
+  for (const records of grouped.values()) {
+    const activeRecords = records.filter((record) => record.isActive);
+    if (activeRecords.length <= 1) continue;
+
+    const sorted = [...records].sort(compareProjectCandidates);
+    const keep = sorted[0];
+    const deactivateIds = sorted.filter((record) => record.isActive && record.id !== keep?.id).map((record) => record.id);
+    if (!deactivateIds.length) continue;
+
+    await prisma.project.updateMany({
+      where: { id: { in: deactivateIds } },
+      data: { isActive: false },
+    });
+
+    repairedCount += 1;
+  }
+
+  if (repairedCount > 0) {
+    console.log(`✓ 활성 프로젝트 자연키 중복 ${repairedCount}건 정리`);
+  }
+}
+
+async function ensureActiveProjectNaturalKeyIndexes() {
+  await repairActiveProjectIdentityDuplicates();
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "Project_active_identity_with_key_unique"
+    ON "Project" ("workspaceId", "type", "baseUrl", "projectKey")
+    WHERE "isActive" = true AND "projectKey" IS NOT NULL
+  `);
+
+  await prisma.$executeRawUnsafe(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "Project_active_identity_without_key_unique"
+    ON "Project" ("workspaceId", "type", "baseUrl")
+    WHERE "isActive" = true AND "projectKey" IS NULL
+  `);
+}
 
 async function ensureDefaultWorkspace() {
   return prisma.organization.upsert({
@@ -119,60 +210,105 @@ async function ensureBootstrapOwner() {
 }
 
 async function seedProjectsFromEnv() {
-  const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim();
-  const jiraToken = process.env.JIRA_PAT?.trim();
-  const jiraProjectKey = process.env.JIRA_PROJECT_KEY?.trim();
+  await ensureActiveProjectNaturalKeyIndexes();
 
-  if (jiraBaseUrl && jiraToken && jiraProjectKey) {
-    await prisma.project.upsert({
-      where: { id: `proj-jira-${jiraProjectKey.toLowerCase()}` },
-      update: {
+  async function upsertEnvProject(params: {
+    preferredId: string;
+    name: string;
+    type: 'jira' | 'gitlab';
+    baseUrl: string;
+    token: string;
+    projectKey: string;
+  }) {
+    const existingByActiveIdentity = await prisma.project.findFirst({
+      where: {
         workspaceId: DEFAULT_WORKSPACE_ID,
-        token: jiraToken,
-        baseUrl: jiraBaseUrl,
-        projectKey: jiraProjectKey,
+        type: params.type,
+        baseUrl: params.baseUrl,
+        projectKey: params.projectKey,
         isActive: true,
       },
-      create: {
-        id: `proj-jira-${jiraProjectKey.toLowerCase()}`,
-        workspaceId: DEFAULT_WORKSPACE_ID,
-        name: `Jira (${jiraProjectKey})`,
-        type: 'jira',
-        baseUrl: jiraBaseUrl,
-        token: jiraToken,
-        projectKey: jiraProjectKey,
-        isActive: true,
-      },
+      select: { id: true, name: true },
+      orderBy: { createdAt: 'asc' },
     });
-    console.log(`✓ Jira 프로젝트 등록: ${jiraProjectKey}`);
+
+    const existingByIdentity =
+      existingByActiveIdentity ??
+      (await prisma.project.findFirst({
+        where: {
+          workspaceId: DEFAULT_WORKSPACE_ID,
+          type: params.type,
+          baseUrl: params.baseUrl,
+          projectKey: params.projectKey,
+        },
+        select: { id: true, name: true },
+        orderBy: [{ isActive: 'desc' }, { createdAt: 'asc' }],
+      }));
+
+    if (existingByIdentity) {
+      await prisma.project.update({
+        where: { id: existingByIdentity.id },
+        data: {
+          workspaceId: DEFAULT_WORKSPACE_ID,
+          token: params.token,
+          baseUrl: params.baseUrl,
+          projectKey: params.projectKey,
+          name: existingByIdentity.name || params.name,
+        },
+      });
+      return existingByIdentity.id;
+    }
+
+    const existingById = await prisma.project.findUnique({
+      where: { id: params.preferredId },
+      select: { id: true },
+    });
+
+    if (existingById) {
+      await prisma.project.update({
+        where: { id: existingById.id },
+        data: {
+          workspaceId: DEFAULT_WORKSPACE_ID,
+          token: params.token,
+          baseUrl: params.baseUrl,
+          projectKey: params.projectKey,
+          isActive: true,
+        },
+      });
+      return existingById.id;
+    }
+
+    const created = await prisma.project.create({
+      data: {
+        id: params.preferredId,
+        workspaceId: DEFAULT_WORKSPACE_ID,
+        name: params.name,
+        type: params.type,
+        baseUrl: params.baseUrl,
+        token: params.token,
+        projectKey: params.projectKey,
+        isActive: true,
+      },
+      select: { id: true },
+    });
+
+    return created.id;
   }
 
-  const gitlabBaseUrl = process.env.GITLAB_BASE_URL?.trim();
-  const gitlabToken = process.env.GITLAB_PAT?.trim();
-  const gitlabProjectId = process.env.GITLAB_PROJECT_ID?.trim();
+  for (const config of readEnvProjects()) {
+    const projectLabel = config.type === 'jira' ? `Jira (${config.projectKey})` : `GitLab (${config.projectKey})`;
+    const preferredId =
+      config.type === 'jira' ? `proj-jira-${config.projectKey.toLowerCase()}` : `proj-gitlab-${config.projectKey}`;
 
-  if (gitlabBaseUrl && gitlabToken && gitlabProjectId) {
-    await prisma.project.upsert({
-      where: { id: `proj-gitlab-${gitlabProjectId}` },
-      update: {
-        workspaceId: DEFAULT_WORKSPACE_ID,
-        token: gitlabToken,
-        baseUrl: gitlabBaseUrl,
-        projectKey: gitlabProjectId,
-        isActive: true,
-      },
-      create: {
-        id: `proj-gitlab-${gitlabProjectId}`,
-        workspaceId: DEFAULT_WORKSPACE_ID,
-        name: `GitLab (${gitlabProjectId})`,
-        type: 'gitlab',
-        baseUrl: gitlabBaseUrl,
-        token: gitlabToken,
-        projectKey: gitlabProjectId,
-        isActive: true,
-      },
+    await upsertEnvProject({
+      preferredId,
+      type: config.type,
+      name: projectLabel,
+      baseUrl: config.baseUrl,
+      token: config.token,
+      projectKey: config.projectKey,
     });
-    console.log(`✓ GitLab 프로젝트 등록: ${gitlabProjectId}`);
+    console.log(`✓ ${projectLabel} 등록`);
   }
 }
 

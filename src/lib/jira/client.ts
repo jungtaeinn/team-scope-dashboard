@@ -8,6 +8,7 @@ import type {
   JiraAssignableUser,
 } from '@/lib/jira/_types';
 import { JIRA_FIELDS_TO_FETCH } from '@/lib/jira/fields';
+import { createExternalApiRequestInit } from '@/lib/network/external-api';
 
 /** Jira REST API 클라이언트 인터페이스 */
 export interface JiraClient {
@@ -100,7 +101,12 @@ export function createJiraClient(config: JiraConfig): JiraClient {
     }
 
     try {
-      const response = await fetch(url.toString(), { headers });
+      const response = await fetch(
+        url.toString(),
+        createExternalApiRequestInit({
+          headers,
+        }),
+      );
 
       if (!response.ok) {
         console.warn(`[Jira] ${response.status} ${response.statusText} — ${url.pathname}`);

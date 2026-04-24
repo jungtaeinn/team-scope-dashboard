@@ -43,6 +43,8 @@ type RawFlowRunStepRow = {
 };
 
 let tablesReady = false;
+let tablesReadyPromise: Promise<void> | null = null;
+const REQUIRED_FLOW_LAB_TABLES = ['FlowRun', 'FlowRunStep'] as const;
 
 function stringifyJson(value: unknown) {
   return value == null ? null : JSON.stringify(value);
@@ -107,50 +109,32 @@ function toRunStep(row: RawFlowRunStepRow): FlowRunStepDetail {
 export async function ensureFlowLabTables() {
   if (tablesReady) return;
 
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "FlowRun" (
-      id TEXT PRIMARY KEY,
-      "workspaceId" TEXT NOT NULL,
-      mode TEXT NOT NULL,
-      scope TEXT NOT NULL,
-      status TEXT NOT NULL,
-      "createdBy" TEXT NOT NULL,
-      "projectId" TEXT,
-      "developerId" TEXT,
-      "datasetKey" TEXT,
-      strict BOOLEAN NOT NULL DEFAULT FALSE,
-      period TEXT,
-      summary JSONB,
-      "startedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      "endedAt" TIMESTAMPTZ
-    );
-  `);
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "FlowRunStep" (
-      id TEXT PRIMARY KEY,
-      "runId" TEXT NOT NULL REFERENCES "FlowRun"(id) ON DELETE CASCADE,
-      "nodeKey" TEXT NOT NULL,
-      "pipelineKey" TEXT NOT NULL,
-      "serviceKey" TEXT NOT NULL,
-      status TEXT NOT NULL,
-      "orderIndex" INTEGER NOT NULL,
-      "targetType" TEXT NOT NULL,
-      "targetId" TEXT,
-      stale BOOLEAN NOT NULL DEFAULT FALSE,
-      dirty BOOLEAN NOT NULL DEFAULT FALSE,
-      summary TEXT,
-      "inputPreview" JSONB,
-      "outputPreview" JSONB,
-      metrics JSONB,
-      artifacts JSONB,
-      error JSONB,
-      "regressionChecks" JSONB,
-      "startedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      "endedAt" TIMESTAMPTZ
-    );
-  `);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "FlowRun_workspace_startedAt_idx" ON "FlowRun" ("workspaceId", "startedAt" DESC);`);
-  await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "FlowRunStep_run_order_idx" ON "FlowRunStep" ("runId", "orderIndex" ASC);`);
+  if (!tablesReadyPromise) {
+    tablesReadyPromise = (async () => {
+      const rows = await prisma.$queryRaw<Array<{ table_name: string }>>`
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public'
+          AND table_name IN (${REQUIRED_FLOW_LAB_TABLES[0]}, ${REQUIRED_FLOW_LAB_TABLES[1]})
+      `;
+
+      const availableTables = new Set(rows.map((row) => row.table_name));
+      const missingTables = REQUIRED_FLOW_LAB_TABLES.filter((tableName) => !availableTables.has(tableName));
+
+      if (missingTables.length > 0) {
+        throw new Error(
+          `Flow Lab 스키마가 준비되지 않았습니다: ${missingTables.join(', ')}. pnpm exec prisma db push 후 다시 시도해 주세요.`,
+        );
+      }
+    })();
+  }
+
+  try {
+    await tablesReadyPromise;
+  } catch (error) {
+    tablesReadyPromise = null;
+    throw error;
+  }
   tablesReady = true;
 }
 

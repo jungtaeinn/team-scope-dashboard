@@ -23,7 +23,7 @@ print_install_help() {
 
 - Homebrew가 없다면 먼저 설치:
   /bin/bash -c "\$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-- Node.js 20 이상: https://nodejs.org/
+- Node.js 22.6 이상: https://nodejs.org/
 - Docker Desktop: https://www.docker.com/products/docker-desktop/
 - pnpm: Node 설치 후 corepack으로 자동 활성화 가능
 - macOS에서 Colima를 쓰고 싶다면:
@@ -50,6 +50,9 @@ require_command() {
 
 require_command node
 require_command docker
+
+log "Node.js 버전을 확인합니다"
+node "$ROOT_DIR/scripts/check-node-version.mjs"
 
 if ! command_exists pnpm; then
   if command_exists corepack; then
@@ -140,7 +143,9 @@ else
 fi
 
 log "PostgreSQL 관측 기능을 활성화합니다"
-(cd "$ROOT_DIR" && pnpm run db:observability)
+if ! (cd "$ROOT_DIR" && pnpm run db:observability); then
+  log "pg_stat_statements 설정은 건너뛰고 계속 진행합니다"
+fi
 
 log "Prisma 스키마를 반영합니다"
 (cd "$ROOT_DIR" && pnpm exec prisma db push)

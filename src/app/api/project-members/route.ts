@@ -5,6 +5,7 @@ import { createJiraClient, fetchProjectIssues } from '@/lib/jira';
 import { createGitlabClient, GitlabApiError } from '@/lib/gitlab';
 import { getGitlabApiOrigin, getGitlabGroupPathFromUrl, getGitlabProjectPathFromUrl } from '@/lib/gitlab/url';
 import { resolveDefaultGroupId } from '@/lib/groups/default-grouping';
+import { createExternalApiRequestInit } from '@/lib/network/external-api';
 import {
   analyzeDeveloperIdentityMatch,
   extractCorporateIdentifier,
@@ -143,12 +144,12 @@ async function searchGitlabProjectPath(baseUrl: string, token: string, keyword: 
   const apiOrigin = getGitlabApiOrigin(baseUrl);
   const response = await fetch(
     `${apiOrigin}/api/v4/projects?search=${encodeURIComponent(keyword)}&simple=true&per_page=100`,
-    {
+    createExternalApiRequestInit({
       headers: {
         'PRIVATE-TOKEN': token,
         'Content-Type': 'application/json',
       },
-    },
+    }),
   );
 
   if (!response.ok) {
@@ -178,12 +179,12 @@ async function searchGitlabGroupPath(baseUrl: string, token: string, keyword: st
   const apiOrigin = getGitlabApiOrigin(baseUrl);
   const response = await fetch(
     `${apiOrigin}/api/v4/groups?search=${encodeURIComponent(keyword)}&per_page=100`,
-    {
+    createExternalApiRequestInit({
       headers: {
         'PRIVATE-TOKEN': token,
         'Content-Type': 'application/json',
       },
-    },
+    }),
   );
 
   if (!response.ok) {
@@ -218,12 +219,15 @@ async function resolveGitlabTarget(params: {
   const apiOrigin = getGitlabApiOrigin(baseUrl);
 
   for (const groupId of buildGitlabGroupIdentifierCandidates(baseUrl, projectKey)) {
-    const response = await fetch(`${apiOrigin}/api/v4/groups/${encodeURIComponent(groupId)}`, {
-      headers: {
-        'PRIVATE-TOKEN': token,
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await fetch(
+      `${apiOrigin}/api/v4/groups/${encodeURIComponent(groupId)}`,
+      createExternalApiRequestInit({
+        headers: {
+          'PRIVATE-TOKEN': token,
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
 
     if (response.ok) {
       const group = (await response.json()) as GitlabGroupResponse;
@@ -256,12 +260,15 @@ async function resolveGitlabTarget(params: {
   }
 
   for (const projectId of buildGitlabProjectIdentifierCandidates(baseUrl, projectKey)) {
-    const response = await fetch(`${apiOrigin}/api/v4/projects/${encodeURIComponent(projectId)}`, {
-      headers: {
-        'PRIVATE-TOKEN': token,
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await fetch(
+      `${apiOrigin}/api/v4/projects/${encodeURIComponent(projectId)}`,
+      createExternalApiRequestInit({
+        headers: {
+          'PRIVATE-TOKEN': token,
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
 
     if (response.ok) {
       const gitlabProject = (await response.json()) as GitlabProjectSearchResponse;
@@ -303,12 +310,12 @@ async function fetchGitlabGroupProjects(baseUrl: string, token: string, groupId:
   while (true) {
     const response = await fetch(
       `${apiOrigin}/api/v4/groups/${encodeURIComponent(groupId)}/projects?include_subgroups=true&per_page=100&page=${page}`,
-      {
+      createExternalApiRequestInit({
         headers: {
           'PRIVATE-TOKEN': token,
           'Content-Type': 'application/json',
         },
-      },
+      }),
     );
 
     if (!response.ok) {
@@ -335,12 +342,12 @@ async function fetchGitlabGroupMembers(baseUrl: string, token: string, groupId: 
 
   const groupMembersResponse = await fetch(
     `${apiOrigin}/api/v4/groups/${encodeURIComponent(groupId)}/members/all?per_page=100`,
-    {
+    createExternalApiRequestInit({
       headers: {
         'PRIVATE-TOKEN': token,
         'Content-Type': 'application/json',
       },
-    },
+    }),
   );
 
   if (!groupMembersResponse.ok) {
@@ -360,12 +367,12 @@ async function fetchGitlabGroupMembers(baseUrl: string, token: string, groupId: 
   for (const project of projects) {
     const membersResponse = await fetch(
       `${apiOrigin}/api/v4/projects/${project.id}/members/all?per_page=100`,
-      {
+      createExternalApiRequestInit({
         headers: {
           'PRIVATE-TOKEN': token,
           'Content-Type': 'application/json',
         },
-      },
+      }),
     );
 
     if (!membersResponse.ok) {

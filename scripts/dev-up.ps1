@@ -19,7 +19,7 @@ function Write-Log {
 function Show-InstallHelp {
   Write-Host ""
   Write-Host "[TeamScope] 로컬 실행 전 아래 도구를 먼저 준비해주세요."
-  Write-Host "- Node.js 20 이상: https://nodejs.org/"
+  Write-Host "- Node.js 22.6 이상: https://nodejs.org/"
   Write-Host "- Docker Desktop (Windows): https://www.docker.com/products/docker-desktop/"
   Write-Host "- pnpm: Node 설치 후 corepack으로 자동 활성화 가능"
   Write-Host ""
@@ -36,6 +36,9 @@ function Require-Command {
 
 Require-Command node
 Require-Command docker
+
+Write-Log "Node.js 버전을 확인합니다"
+node (Join-Path $RootDir "scripts/check-node-version.mjs")
 
 if (-not (Get-Command pnpm -ErrorAction SilentlyContinue)) {
   if (Get-Command corepack -ErrorAction SilentlyContinue) {
@@ -123,7 +126,11 @@ if (-not (Test-Path $NodeModules)) {
 
 Write-Log "PostgreSQL 관측 기능을 활성화합니다"
 Push-Location $RootDir
-pnpm run db:observability
+try {
+  pnpm run db:observability
+} catch {
+  Write-Log "pg_stat_statements 설정은 건너뛰고 계속 진행합니다"
+}
 Pop-Location
 
 Write-Log "Prisma 스키마를 반영합니다"

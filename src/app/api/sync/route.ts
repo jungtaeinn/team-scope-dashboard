@@ -7,6 +7,7 @@ import { createJiraClient, fetchProjectIssues } from '@/lib/jira';
 import { createGitlabClient, parseMergeRequest, parseNote } from '@/lib/gitlab';
 import { GitlabApiError } from '@/lib/gitlab/client';
 import { getGitlabApiOrigin, getGitlabGroupPathFromUrl, getGitlabProjectPathFromUrl } from '@/lib/gitlab/url';
+import { createExternalApiRequestInit } from '@/lib/network/external-api';
 import { cleanupInactiveProjectData } from '@/lib/projects/cleanup-project-data';
 import { ensureEnvProjects, resolveEnvProjectToken } from '@/lib/projects/ensure-env-projects';
 import { extractCorporateIdentifier, normalizeIdentity, resolveDeveloperIdentityMatch } from '@/lib/members/identity';
@@ -104,12 +105,12 @@ async function searchGitlabProjectPath(baseUrl: string, token: string, keyword: 
   const apiOrigin = getGitlabApiOrigin(baseUrl);
   const response = await fetch(
     `${apiOrigin}/api/v4/projects?search=${encodeURIComponent(keyword)}&simple=true&per_page=100`,
-    {
+    createExternalApiRequestInit({
       headers: {
         'PRIVATE-TOKEN': token,
         'Content-Type': 'application/json',
       },
-    },
+    }),
   );
 
   if (!response.ok) {
@@ -137,12 +138,15 @@ async function searchGitlabProjectPath(baseUrl: string, token: string, keyword: 
 
 async function searchGitlabGroupPath(baseUrl: string, token: string, keyword: string) {
   const apiOrigin = getGitlabApiOrigin(baseUrl);
-  const response = await fetch(`${apiOrigin}/api/v4/groups?search=${encodeURIComponent(keyword)}&per_page=100`, {
-    headers: {
-      'PRIVATE-TOKEN': token,
-      'Content-Type': 'application/json',
-    },
-  });
+  const response = await fetch(
+    `${apiOrigin}/api/v4/groups?search=${encodeURIComponent(keyword)}&per_page=100`,
+    createExternalApiRequestInit({
+      headers: {
+        'PRIVATE-TOKEN': token,
+        'Content-Type': 'application/json',
+      },
+    }),
+  );
 
   if (!response.ok) {
     throw new GitlabApiError(
@@ -176,12 +180,15 @@ async function resolveGitlabTarget(params: {
   const apiOrigin = getGitlabApiOrigin(baseUrl);
 
   for (const groupId of buildGitlabGroupIdentifierCandidates(baseUrl, projectKey)) {
-    const response = await fetch(`${apiOrigin}/api/v4/groups/${encodeURIComponent(groupId)}`, {
-      headers: {
-        'PRIVATE-TOKEN': token,
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await fetch(
+      `${apiOrigin}/api/v4/groups/${encodeURIComponent(groupId)}`,
+      createExternalApiRequestInit({
+        headers: {
+          'PRIVATE-TOKEN': token,
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
 
     if (response.ok) {
       const group = (await response.json()) as GitlabGroupResponse;
@@ -210,12 +217,15 @@ async function resolveGitlabTarget(params: {
   }
 
   for (const projectId of buildGitlabProjectIdentifierCandidates(baseUrl, projectKey)) {
-    const response = await fetch(`${apiOrigin}/api/v4/projects/${encodeURIComponent(projectId)}`, {
-      headers: {
-        'PRIVATE-TOKEN': token,
-        'Content-Type': 'application/json',
-      },
-    });
+    const response = await fetch(
+      `${apiOrigin}/api/v4/projects/${encodeURIComponent(projectId)}`,
+      createExternalApiRequestInit({
+        headers: {
+          'PRIVATE-TOKEN': token,
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
 
     if (response.ok) {
       const gitlabProject = (await response.json()) as GitlabProjectSearchResponse;
@@ -268,12 +278,12 @@ async function fetchGitlabGroupMembers(baseUrl: string, token: string, groupId: 
 
   const groupMembersResponse = await fetch(
     `${apiOrigin}/api/v4/groups/${encodeURIComponent(groupId)}/members/all?per_page=100`,
-    {
+    createExternalApiRequestInit({
       headers: {
         'PRIVATE-TOKEN': token,
         'Content-Type': 'application/json',
       },
-    },
+    }),
   );
 
   if (!groupMembersResponse.ok) {
@@ -291,12 +301,15 @@ async function fetchGitlabGroupMembers(baseUrl: string, token: string, groupId: 
 
   const projects = await fetchGitlabGroupProjects(baseUrl, token, groupId);
   for (const project of projects) {
-    const membersResponse = await fetch(`${apiOrigin}/api/v4/projects/${project.id}/members/all?per_page=100`, {
-      headers: {
-        'PRIVATE-TOKEN': token,
-        'Content-Type': 'application/json',
-      },
-    });
+    const membersResponse = await fetch(
+      `${apiOrigin}/api/v4/projects/${project.id}/members/all?per_page=100`,
+      createExternalApiRequestInit({
+        headers: {
+          'PRIVATE-TOKEN': token,
+          'Content-Type': 'application/json',
+        },
+      }),
+    );
 
     if (!membersResponse.ok) continue;
 
@@ -378,6 +391,7 @@ export async function POST(request: Request) {
 
     let totalItemCount = 0;
     let skippedProjectCount = 0;
+    let failedProjectCount = 0;
 
     for (const project of projects) {
       const syncKey = `${workspaceId}:${project.id}`;
@@ -418,6 +432,7 @@ export async function POST(request: Request) {
         totalItemCount += itemCount;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류';
+        failedProjectCount += 1;
         await prisma.syncLog.update({
           where: { id: syncLog.id },
           data: {
@@ -440,12 +455,27 @@ export async function POST(request: Request) {
       });
     }
 
+    const attemptedProjectCount = projects.length - skippedProjectCount;
+    if (attemptedProjectCount > 0 && failedProjectCount === attemptedProjectCount) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: '모든 프로젝트 동기화가 실패했습니다. 연결 정보와 토큰을 확인한 뒤 다시 시도해 주세요.',
+          itemCount: 0,
+          cleanup: inactiveCleanup,
+        },
+        { status: 502 },
+      );
+    }
+
     return NextResponse.json({
       success: true,
       message:
-        skippedProjectCount > 0
-          ? `${projects.length - skippedProjectCount}개 프로젝트에서 ${totalItemCount}건 동기화 완료, ${skippedProjectCount}개는 진행 중이라 건너뜀`
-          : `${projects.length}개 프로젝트에서 ${totalItemCount}건 동기화 완료`,
+        failedProjectCount > 0
+          ? `${attemptedProjectCount - failedProjectCount}개 프로젝트 동기화 완료, ${failedProjectCount}개 실패${skippedProjectCount > 0 ? `, ${skippedProjectCount}개는 진행 중이라 건너뜀` : ''}`
+          : skippedProjectCount > 0
+            ? `${attemptedProjectCount}개 프로젝트에서 ${totalItemCount}건 동기화 완료, ${skippedProjectCount}개는 진행 중이라 건너뜀`
+            : `${projects.length}개 프로젝트에서 ${totalItemCount}건 동기화 완료`,
       itemCount: totalItemCount,
       cleanup: inactiveCleanup,
     });

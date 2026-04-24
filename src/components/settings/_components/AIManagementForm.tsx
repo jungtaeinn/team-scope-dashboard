@@ -116,6 +116,10 @@ function createInitialProviderMessages(): Record<AiProvider, string | null> {
   return { openai: null, gemini: null };
 }
 
+function createInitialVerifiedKeys(): Record<AiProvider, string | null> {
+  return { openai: null, gemini: null };
+}
+
 function formatTestedAt(value: string | null) {
   if (!value) return null;
 
@@ -247,6 +251,7 @@ function ModelSelect({ id, value, options, onChange }: ModelSelectProps) {
 export function AIManagementForm() {
   const [settings, setSettings] = useState<Record<AiProvider, AiSettingView | null>>({ openai: null, gemini: null });
   const [drafts, setDrafts] = useState<Record<AiProvider, AiDraft>>(createInitialDrafts);
+  const [verifiedKeys, setVerifiedKeys] = useState<Record<AiProvider, string | null>>(createInitialVerifiedKeys);
   const [isLoading, setIsLoading] = useState(true);
   const [savingProvider, setSavingProvider] = useState<AiProvider | null>(null);
   const [testingProvider, setTestingProvider] = useState<AiProvider | null>(null);
@@ -286,6 +291,7 @@ export function AIManagementForm() {
 
       setSettings(nextSettings);
       setDrafts(nextDrafts);
+      setVerifiedKeys(createInitialVerifiedKeys());
       setMessage(null);
     } catch (error) {
       console.error('AI 설정 조회 실패:', error);
@@ -309,6 +315,15 @@ export function AIManagementForm() {
   const updateProviderMessage = useCallback((provider: AiProvider, nextMessage: string | null) => {
     setProviderMessages((prev) => ({ ...prev, [provider]: nextMessage }));
   }, []);
+
+  const updateApiKey = useCallback(
+    (provider: AiProvider, apiKey: string) => {
+      updateDraft(provider, { apiKey });
+      setVerifiedKeys((prev) => ({ ...prev, [provider]: null }));
+      updateProviderMessage(provider, null);
+    },
+    [updateDraft, updateProviderMessage],
+  );
 
   const notifyPromptBar = useCallback(() => {
     window.dispatchEvent(new Event('teamscope:ai-settings-updated'));
@@ -342,6 +357,7 @@ export function AIManagementForm() {
 
         setSettings((prev) => ({ ...prev, [provider]: json.data }));
         updateDraft(provider, { apiKey: '', model: json.data.model ?? draft.model, isEnabled: json.data.isEnabled });
+        setVerifiedKeys((prev) => ({ ...prev, [provider]: null }));
         setMessage(`${PROVIDER_META[provider].label} 설정을 저장했습니다.`);
         notifyPromptBar();
       } catch (error) {
@@ -386,6 +402,12 @@ export function AIManagementForm() {
         }
 
         const nextMessage = json.data?.result.message ?? json.error ?? '연결 테스트에 실패했습니다.';
+        if (json.data?.result.ok) {
+          updateDraft(provider, { isEnabled: true });
+          setVerifiedKeys((prev) => ({ ...prev, [provider]: draft.apiKey.trim() || null }));
+        } else {
+          setVerifiedKeys((prev) => ({ ...prev, [provider]: null }));
+        }
         updateProviderMessage(provider, nextMessage);
         setMessage(nextMessage);
       } catch (error) {
@@ -397,7 +419,7 @@ export function AIManagementForm() {
         setTestingProvider(null);
       }
     },
-    [drafts, settings, updateProviderMessage],
+    [drafts, settings, updateDraft, updateProviderMessage],
   );
 
   const handleDelete = useCallback(
@@ -423,6 +445,7 @@ export function AIManagementForm() {
 
         setSettings((prev) => ({ ...prev, [provider]: null }));
         updateDraft(provider, { apiKey: '', model: PROVIDER_META[provider].model, isEnabled: false });
+        setVerifiedKeys((prev) => ({ ...prev, [provider]: null }));
         setVisibleApiKeys((prev) => ({ ...prev, [provider]: false }));
         setMessage(`${providerLabel} AI API Key와 연결 상태를 제거했습니다.`);
         notifyPromptBar();
@@ -480,6 +503,10 @@ export function AIManagementForm() {
             const isApiKeyVisible = visibleApiKeys[provider];
             const providerMessage = providerMessages[provider];
             const testedAt = formatTestedAt(setting?.lastTestedAt ?? null);
+            const hasSavedKey = Boolean(setting?.isConfigured);
+            const typedApiKey = draft.apiKey.trim();
+            const hasVerifiedTypedKey = Boolean(typedApiKey && verifiedKeys[provider] === typedApiKey);
+            const canSave = typedApiKey ? hasVerifiedTypedKey : hasSavedKey;
 
             return (
               <section
@@ -517,7 +544,7 @@ export function AIManagementForm() {
                       <input
                         type={isApiKeyVisible ? 'text' : 'password'}
                         value={draft.apiKey}
-                        onChange={(event) => updateDraft(provider, { apiKey: event.target.value })}
+                        onChange={(event) => updateApiKey(provider, event.target.value)}
                         placeholder={setting?.isConfigured ? `${setting.maskedKey} 저장됨` : meta.placeholder}
                         className="h-10 w-full rounded-lg border border-[var(--border)] bg-[var(--background)] pl-9 pr-11 text-sm text-[var(--foreground)] outline-none transition-colors placeholder:text-[var(--muted-foreground)] focus:border-[var(--primary)] focus:ring-1 focus:ring-[var(--primary)]"
                       />
@@ -592,7 +619,7 @@ export function AIManagementForm() {
                   <button
                     type="button"
                     onClick={() => void handleSave(provider)}
-                    disabled={isSaving || isDeleting || (draft.isEnabled && !draft.apiKey && !setting?.isConfigured)}
+                    disabled={isSaving || isTesting || isDeleting || !canSave}
                     className="inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-[var(--primary)] px-3 text-sm font-medium text-[var(--primary-foreground)] transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}

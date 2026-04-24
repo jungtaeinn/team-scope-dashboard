@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/db';
 
 export type AiProvider = 'openai' | 'gemini';
@@ -47,7 +47,24 @@ type LegacyAiSettingRow = {
   api_key: string | null;
 };
 
+type AiSettingsColumnRow = {
+  column_name: string;
+};
+
 const ENCRYPTION_PREFIX = 'v1';
+const REQUIRED_AI_SETTINGS_COLUMNS = [
+  'id',
+  'workspace_id',
+  'provider',
+  'encrypted_api_key',
+  'model',
+  'is_enabled',
+  'last_tested_at',
+  'last_test_status',
+  'last_test_message',
+  'created_at',
+  'updated_at',
+] as const;
 
 function isEncryptedApiKey(value: string | null | undefined) {
   return Boolean(value?.startsWith(`${ENCRYPTION_PREFIX}:`));
@@ -96,72 +113,100 @@ function decryptApiKey(value: string | null) {
 }
 
 export async function ensureAiSettingsTable() {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS "ai_integration_settings" (
-      "id" TEXT PRIMARY KEY DEFAULT md5(random()::text || clock_timestamp()::text),
-      "workspace_id" TEXT NOT NULL,
-      "provider" TEXT NOT NULL,
-      "encrypted_api_key" TEXT,
-      "model" TEXT,
-      "is_enabled" BOOLEAN NOT NULL DEFAULT false,
-      "last_tested_at" TIMESTAMPTZ,
-      "last_test_status" TEXT,
-      "last_test_message" TEXT,
-      "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      CONSTRAINT "ai_integration_settings_workspace_provider_key" UNIQUE ("workspace_id", "provider")
-    )
-  `);
+  const tableRows = await prisma.$queryRaw<Array<{ table_name: string }>>`
+    SELECT table_name
+    FROM information_schema.tables
+    WHERE table_schema = 'public'
+      AND table_name = 'ai_integration_settings'
+  `;
 
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE "ai_integration_settings"
-      ADD COLUMN IF NOT EXISTS "workspace_id" TEXT NOT NULL DEFAULT 'default-workspace',
-      ADD COLUMN IF NOT EXISTS "provider" TEXT NOT NULL DEFAULT 'openai',
-      ADD COLUMN IF NOT EXISTS "encrypted_api_key" TEXT,
-      ADD COLUMN IF NOT EXISTS "model" TEXT,
-      ADD COLUMN IF NOT EXISTS "is_enabled" BOOLEAN NOT NULL DEFAULT false,
-      ADD COLUMN IF NOT EXISTS "last_tested_at" TIMESTAMPTZ,
-      ADD COLUMN IF NOT EXISTS "last_test_status" TEXT,
-      ADD COLUMN IF NOT EXISTS "last_test_message" TEXT,
-      ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now()
-  `);
+  const columnRows = await prisma.$queryRaw<AiSettingsColumnRow[]>`
+    SELECT column_name
+    FROM information_schema.columns
+    WHERE table_name = 'ai_integration_settings'
+  `;
 
-  await prisma.$executeRawUnsafe(`
-    UPDATE "ai_integration_settings"
-    SET
-      "workspace_id" = COALESCE(NULLIF("workspace_id", ''), 'default-workspace'),
-      "provider" = COALESCE(NULLIF("provider", ''), 'openai'),
-      "updated_at" = COALESCE("updated_at", now()),
-      "created_at" = COALESCE("created_at", now())
-  `);
+  const availableColumns = new Set(columnRows.map((row) => row.column_name));
+  const hasCurrentShape =
+    tableRows.length > 0 &&
+    REQUIRED_AI_SETTINGS_COLUMNS.every((columnName) => availableColumns.has(columnName)) &&
+    !availableColumns.has('api_key');
 
-  await prisma.$executeRawUnsafe(`
-    DELETE FROM "ai_integration_settings" stale
-    USING (
-      SELECT id
-      FROM (
-        SELECT
-          id,
-          row_number() OVER (
-            PARTITION BY "workspace_id", "provider"
-            ORDER BY "updated_at" DESC NULLS LAST, "created_at" DESC NULLS LAST, id DESC
-          ) AS row_number
-        FROM "ai_integration_settings"
-      ) ranked
-      WHERE ranked.row_number > 1
-    ) duplicates
-    WHERE stale.id = duplicates.id
-  `);
+  if (!hasCurrentShape) {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "ai_integration_settings" (
+        "id" TEXT PRIMARY KEY DEFAULT md5(random()::text || clock_timestamp()::text),
+        "workspace_id" TEXT NOT NULL,
+        "provider" TEXT NOT NULL,
+        "encrypted_api_key" TEXT,
+        "model" TEXT,
+        "is_enabled" BOOLEAN NOT NULL DEFAULT false,
+        "last_tested_at" TIMESTAMPTZ,
+        "last_test_status" TEXT,
+        "last_test_message" TEXT,
+        "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT "ai_integration_settings_workspace_provider_key" UNIQUE ("workspace_id", "provider")
+      )
+    `);
 
-  await prisma.$executeRawUnsafe(`
-    CREATE UNIQUE INDEX IF NOT EXISTS "ai_integration_settings_workspace_provider_key"
-    ON "ai_integration_settings" ("workspace_id", "provider")
-  `);
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "ai_integration_settings"
+        ADD COLUMN IF NOT EXISTS "workspace_id" TEXT NOT NULL DEFAULT 'default-workspace',
+        ADD COLUMN IF NOT EXISTS "provider" TEXT NOT NULL DEFAULT 'openai',
+        ADD COLUMN IF NOT EXISTS "encrypted_api_key" TEXT,
+        ADD COLUMN IF NOT EXISTS "model" TEXT,
+        ADD COLUMN IF NOT EXISTS "is_enabled" BOOLEAN NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS "last_tested_at" TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS "last_test_status" TEXT,
+        ADD COLUMN IF NOT EXISTS "last_test_message" TEXT,
+        ADD COLUMN IF NOT EXISTS "created_at" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMPTZ NOT NULL DEFAULT now()
+    `);
 
-  await prisma.$executeRawUnsafe(
-    'CREATE INDEX IF NOT EXISTS "ai_integration_settings_workspace_enabled_idx" ON "ai_integration_settings" ("workspace_id", "is_enabled")',
-  );
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE "ai_integration_settings"
+        ALTER COLUMN "id" SET DEFAULT md5(random()::text || clock_timestamp()::text)
+    `);
+  }
+
+  if (!hasCurrentShape) {
+    await prisma.$executeRawUnsafe(`
+      UPDATE "ai_integration_settings"
+      SET
+        "workspace_id" = COALESCE(NULLIF("workspace_id", ''), 'default-workspace'),
+        "provider" = COALESCE(NULLIF("provider", ''), 'openai'),
+        "updated_at" = COALESCE("updated_at", now()),
+        "created_at" = COALESCE("created_at", now())
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      DELETE FROM "ai_integration_settings" stale
+      USING (
+        SELECT id
+        FROM (
+          SELECT
+            id,
+            row_number() OVER (
+              PARTITION BY "workspace_id", "provider"
+              ORDER BY "updated_at" DESC NULLS LAST, "created_at" DESC NULLS LAST, id DESC
+            ) AS row_number
+          FROM "ai_integration_settings"
+        ) ranked
+        WHERE ranked.row_number > 1
+      ) duplicates
+      WHERE stale.id = duplicates.id
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE UNIQUE INDEX IF NOT EXISTS "ai_integration_settings_workspace_provider_key"
+      ON "ai_integration_settings" ("workspace_id", "provider")
+    `);
+
+    await prisma.$executeRawUnsafe(
+      'CREATE INDEX IF NOT EXISTS "ai_integration_settings_workspace_enabled_idx" ON "ai_integration_settings" ("workspace_id", "is_enabled")',
+    );
+  }
 
   const plaintextEncryptedRows = await prisma.$queryRaw<Array<{ id: string; encrypted_api_key: string }>>`
     SELECT id, encrypted_api_key
@@ -177,13 +222,7 @@ export async function ensureAiSettingsTable() {
     `;
   }
 
-  const columnRows = await prisma.$queryRaw<Array<{ column_name: string }>>`
-    SELECT column_name
-    FROM information_schema.columns
-    WHERE table_name = 'ai_integration_settings' AND column_name = 'api_key'
-  `;
-
-  if (columnRows.length > 0) {
+  if (availableColumns.has('api_key')) {
     const legacyRows = await prisma.$queryRaw<LegacyAiSettingRow[]>`
       SELECT id, api_key
       FROM "ai_integration_settings"
@@ -305,8 +344,8 @@ export async function upsertAiSetting(params: {
   const nextEnabled = Boolean(params.isEnabled && nextApiKey);
 
   const rows = await prisma.$queryRaw<AiSettingRow[]>`
-    INSERT INTO "ai_integration_settings" ("workspace_id", "provider", "encrypted_api_key", "model", "is_enabled", "updated_at")
-    VALUES (${params.workspaceId}, ${params.provider}, ${encryptedApiKey}, ${nextModel}, ${nextEnabled}, now())
+    INSERT INTO "ai_integration_settings" ("id", "workspace_id", "provider", "encrypted_api_key", "model", "is_enabled", "updated_at")
+    VALUES (${randomUUID()}, ${params.workspaceId}, ${params.provider}, ${encryptedApiKey}, ${nextModel}, ${nextEnabled}, now())
     ON CONFLICT ("workspace_id", "provider")
     DO UPDATE SET
       "encrypted_api_key" = EXCLUDED."encrypted_api_key",
@@ -338,10 +377,10 @@ export async function updateAiTestResult(params: {
 
   const rows = await prisma.$queryRaw<AiSettingRow[]>`
     INSERT INTO "ai_integration_settings" (
-      "workspace_id", "provider", "model", "is_enabled", "last_tested_at", "last_test_status", "last_test_message", "updated_at"
+      "id", "workspace_id", "provider", "model", "is_enabled", "last_tested_at", "last_test_status", "last_test_message", "updated_at"
     )
     VALUES (
-      ${params.workspaceId}, ${params.provider}, ${getDefaultModel(params.provider)}, false, now(), ${params.status}, ${params.message}, now()
+      ${randomUUID()}, ${params.workspaceId}, ${params.provider}, ${getDefaultModel(params.provider)}, false, now(), ${params.status}, ${params.message}, now()
     )
     ON CONFLICT ("workspace_id", "provider")
     DO UPDATE SET

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
+import { createProjectTokenRequest, shouldCommitProjectTokenRequest, type ProjectTokenRequest } from '@/lib/projects/project-token-request';
 import { MemberMappingSections } from './MemberMappingForm';
 import {
   Plus,
@@ -13,6 +14,8 @@ import {
   CheckCircle2,
   XCircle,
   ChevronDown,
+  Eye,
+  EyeOff,
   ExternalLink,
   PlugZap,
 } from 'lucide-react';
@@ -22,8 +25,9 @@ interface ProjectConfig {
   name: string;
   type: 'jira' | 'gitlab';
   baseUrl: string;
-  projectKey: string;
+  projectKey: string | null;
   isActive: boolean;
+  token?: string;
 }
 
 interface ProjectFormData {
@@ -51,6 +55,10 @@ const EMPTY_FORM: ProjectFormData = {
   token: '',
   projectKey: '',
 };
+
+function normalizeProjectKey(projectKey: string | null | undefined) {
+  return projectKey ?? '';
+}
 
 function TypeBadge({ type }: { type: 'jira' | 'gitlab' }) {
   return (
@@ -84,6 +92,11 @@ export function ProjectManagementForm() {
   const [rowTestMessage, setRowTestMessage] = useState<Record<string, string>>({});
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [projectActionNotice, setProjectActionNotice] = useState<ProjectActionNotice | null>(null);
+  const [isProjectTokenVisible, setIsProjectTokenVisible] = useState(false);
+  const [loadingTokenProjectId, setLoadingTokenProjectId] = useState<string | null>(null);
+  const activeTokenRequestRef = useRef<ProjectTokenRequest | null>(null);
+  const tokenRequestSequenceRef = useRef(0);
+  const tokenRequestAbortRef = useRef<AbortController | null>(null);
 
   const loadProjects = useCallback(async () => {
     setIsLoading(true);
@@ -91,7 +104,7 @@ export function ProjectManagementForm() {
       const res = await fetch('/api/projects');
       const json = (await res.json()) as ApiResponse<ProjectConfig[]>;
       if (json.success && json.data) {
-        setProjects(json.data);
+        setProjects(json.data.map((project) => ({ ...project, projectKey: normalizeProjectKey(project.projectKey) })));
       }
     } catch (error) {
       console.error('프로젝트 조회 실패:', error);
@@ -104,34 +117,87 @@ export function ProjectManagementForm() {
     void loadProjects();
   }, [loadProjects]);
 
+  useEffect(() => {
+    return () => {
+      tokenRequestAbortRef.current?.abort();
+    };
+  }, []);
+
   const handleOpenAdd = useCallback(() => {
     setProjectActionNotice(null);
     setEditingId(null);
+    tokenRequestAbortRef.current?.abort();
+    tokenRequestAbortRef.current = null;
+    activeTokenRequestRef.current = null;
     setForm(EMPTY_FORM);
+    setIsProjectTokenVisible(false);
+    setLoadingTokenProjectId(null);
     setTestStatus('idle');
     setTestMessage('');
     setIsFormOpen(true);
   }, []);
 
-  const handleStartEdit = useCallback((project: ProjectConfig) => {
+  const handleStartEdit = useCallback(async (project: ProjectConfig) => {
     setProjectActionNotice(null);
     setEditingId(project.id);
+    tokenRequestAbortRef.current?.abort();
+    const abortController = new AbortController();
+    tokenRequestAbortRef.current = abortController;
+    const request = createProjectTokenRequest(++tokenRequestSequenceRef.current, project.id);
+    activeTokenRequestRef.current = request;
+    setIsProjectTokenVisible(false);
     setForm({
       name: project.name,
       type: project.type,
       baseUrl: project.baseUrl,
       token: '',
-      projectKey: project.projectKey,
+      projectKey: normalizeProjectKey(project.projectKey),
     });
     setTestStatus('idle');
     setTestMessage('');
     setIsFormOpen(true);
+
+    setLoadingTokenProjectId(project.id);
+    try {
+      const response = await fetch(`/api/projects?id=${encodeURIComponent(project.id)}&includeToken=true`, {
+        signal: abortController.signal,
+      });
+      const json = (await response.json()) as ApiResponse<ProjectConfig>;
+      if (!response.ok || !json.success || !json.data) {
+        throw new Error(json.error ?? '저장된 토큰을 불러오지 못했습니다.');
+      }
+
+      setForm((current) => {
+        if (!shouldCommitProjectTokenRequest(activeTokenRequestRef.current, request)) return current;
+        return {
+          ...current,
+          token: json.data.token ?? '',
+        };
+      });
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      console.error('프로젝트 토큰 조회 실패:', error);
+      setProjectActionNotice({
+        tone: 'error',
+        message: error instanceof Error ? error.message : '저장된 토큰을 불러오지 못했습니다.',
+      });
+    } finally {
+      if (shouldCommitProjectTokenRequest(activeTokenRequestRef.current, request)) {
+        setLoadingTokenProjectId(null);
+        tokenRequestAbortRef.current = null;
+      }
+    }
   }, []);
 
   const handleCloseForm = useCallback(() => {
+    tokenRequestAbortRef.current?.abort();
+    tokenRequestAbortRef.current = null;
+    activeTokenRequestRef.current = null;
     setIsFormOpen(false);
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setIsProjectTokenVisible(false);
+    setLoadingTokenProjectId(null);
     setTestStatus('idle');
     setTestMessage('');
   }, []);
@@ -389,13 +455,31 @@ export function ProjectManagementForm() {
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">토큰</label>
-                <input
-                  type="password"
-                  value={form.token}
-                  onChange={(e) => setForm((f) => ({ ...f, token: e.target.value }))}
-                  placeholder={editingId ? '변경하려면 입력' : 'Personal Access Token'}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-                />
+                <div className="relative">
+                  <input
+                    type={isProjectTokenVisible ? 'text' : 'password'}
+                    value={form.token}
+                    onChange={(e) => setForm((f) => ({ ...f, token: e.target.value }))}
+                    placeholder={
+                      loadingTokenProjectId === editingId
+                        ? '저장된 토큰을 불러오는 중...'
+                        : editingId
+                          ? '저장된 토큰'
+                          : 'Personal Access Token'
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 pr-10 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setIsProjectTokenVisible((visible) => !visible)}
+                    disabled={!form.token}
+                    className="absolute right-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-gray-700 dark:hover:text-gray-200"
+                    title={isProjectTokenVisible ? '토큰 숨기기' : '토큰 보기'}
+                    aria-label={isProjectTokenVisible ? '토큰 숨기기' : '토큰 보기'}
+                  >
+                    {isProjectTokenVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">프로젝트 키</label>
@@ -427,7 +511,7 @@ export function ProjectManagementForm() {
               <button
                 type="button"
                 onClick={handleTestConnection}
-                disabled={!form.baseUrl || !form.token || testStatus === 'testing'}
+                disabled={!form.baseUrl || !form.token || testStatus === 'testing' || loadingTokenProjectId === editingId}
                 className={cn(
                   'inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium',
                   'text-gray-700 hover:bg-gray-100 transition-colors dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700',
@@ -493,7 +577,8 @@ export function ProjectManagementForm() {
                     <div>
                       <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{project.name}</p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {project.baseUrl} · {project.projectKey}
+                        {project.baseUrl}
+                        {project.projectKey ? ` · ${project.projectKey}` : ''}
                       </p>
                       {rowTestStatus[project.id] &&
                       rowTestStatus[project.id] !== 'idle' &&
@@ -532,7 +617,7 @@ export function ProjectManagementForm() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleStartEdit(project)}
+                      onClick={() => void handleStartEdit(project)}
                       className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-blue-600 dark:hover:bg-gray-800"
                       title="수정"
                       aria-label={`${project.name} 수정`}

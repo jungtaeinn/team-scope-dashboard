@@ -7,6 +7,7 @@ import {
   getGitlabProjectPathFromUrl,
   normalizeGitlabProjectBaseUrl,
 } from '@/lib/gitlab/url';
+import { createExternalApiRequestInit } from '@/lib/network/external-api';
 import { resolveEnvProjectToken } from '@/lib/projects/ensure-env-projects';
 
 /** 연결 테스트 요청 바디 */
@@ -62,12 +63,12 @@ function buildGitlabGroupIdentifierCandidates(baseUrl: string, projectKey?: stri
 async function searchGitlabProjectPath(apiBase: string, token: string, keyword: string) {
   const response = await fetch(
     `${apiBase}/api/v4/projects?search=${encodeURIComponent(keyword)}&simple=true&per_page=100`,
-    {
+    createExternalApiRequestInit({
       headers: {
         'PRIVATE-TOKEN': token,
         Accept: 'application/json',
       },
-    },
+    }),
   );
 
   if (!response.ok) return null;
@@ -90,12 +91,12 @@ async function searchGitlabProjectPath(apiBase: string, token: string, keyword: 
 async function searchGitlabGroupPath(apiBase: string, token: string, keyword: string) {
   const response = await fetch(
     `${apiBase}/api/v4/groups?search=${encodeURIComponent(keyword)}&per_page=100`,
-    {
+    createExternalApiRequestInit({
       headers: {
         'PRIVATE-TOKEN': token,
         Accept: 'application/json',
       },
-    },
+    }),
   );
 
   if (!response.ok) return null;
@@ -197,12 +198,15 @@ async function testJiraConnection(body: TestConnectionBody) {
   const url = `${body.baseUrl.replace(/\/+$/, '')}/rest/api/2/myself`;
 
   try {
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${body.token}`,
-        Accept: 'application/json',
-      },
-    });
+    const res = await fetch(
+      url,
+      createExternalApiRequestInit({
+        headers: {
+          Authorization: `Bearer ${body.token}`,
+          Accept: 'application/json',
+        },
+      }),
+    );
 
     if (!res.ok) {
       return NextResponse.json({
@@ -217,9 +221,12 @@ async function testJiraConnection(body: TestConnectionBody) {
     let projectCheck = null;
     if (body.projectKey) {
       const projectUrl = `${body.baseUrl.replace(/\/+$/, '')}/rest/api/2/project/${body.projectKey}`;
-      const projectRes = await fetch(projectUrl, {
-        headers: { Authorization: `Bearer ${body.token}`, Accept: 'application/json' },
-      });
+      const projectRes = await fetch(
+        projectUrl,
+        createExternalApiRequestInit({
+          headers: { Authorization: `Bearer ${body.token}`, Accept: 'application/json' },
+        }),
+      );
       projectCheck = projectRes.ok ? '프로젝트 확인 완료' : `프로젝트 조회 실패 (HTTP ${projectRes.status})`;
     }
 
@@ -244,12 +251,15 @@ async function testGitlabConnection(body: TestConnectionBody) {
   const url = `${apiBase}/api/v4/user`;
 
   try {
-    const res = await fetch(url, {
-      headers: {
-        'PRIVATE-TOKEN': body.token,
-        Accept: 'application/json',
-      },
-    });
+    const res = await fetch(
+      url,
+      createExternalApiRequestInit({
+        headers: {
+          'PRIVATE-TOKEN': body.token,
+          Accept: 'application/json',
+        },
+      }),
+    );
 
     if (!res.ok) {
       return NextResponse.json({
@@ -268,9 +278,12 @@ async function testGitlabConnection(body: TestConnectionBody) {
 
       for (const candidate of buildGitlabGroupIdentifierCandidates(body.baseUrl, body.projectKey)) {
         const groupUrl = `${apiBase}/api/v4/groups/${encodeURIComponent(candidate)}`;
-        const groupRes = await fetch(groupUrl, {
-          headers: { 'PRIVATE-TOKEN': body.token, Accept: 'application/json' },
-        });
+        const groupRes = await fetch(
+          groupUrl,
+          createExternalApiRequestInit({
+            headers: { 'PRIVATE-TOKEN': body.token, Accept: 'application/json' },
+          }),
+        );
         if (groupRes.ok) {
           resolvedGroupId = candidate;
           break;
@@ -287,9 +300,12 @@ async function testGitlabConnection(body: TestConnectionBody) {
       if (!resolvedGroupId) {
         for (const candidate of buildGitlabProjectIdentifierCandidates(body.baseUrl, body.projectKey)) {
           const projectUrl = `${apiBase}/api/v4/projects/${encodeURIComponent(candidate)}`;
-          const projectRes = await fetch(projectUrl, {
-            headers: { 'PRIVATE-TOKEN': body.token, Accept: 'application/json' },
-          });
+          const projectRes = await fetch(
+            projectUrl,
+            createExternalApiRequestInit({
+              headers: { 'PRIVATE-TOKEN': body.token, Accept: 'application/json' },
+            }),
+          );
           if (projectRes.ok) {
             resolvedProjectId = candidate;
             break;
