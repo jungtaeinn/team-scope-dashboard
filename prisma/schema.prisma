@@ -1,0 +1,440 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                 String       @id @default(uuid())
+  name               String
+  email              String
+  emailVerified      Boolean      @default(false)
+  image              String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  mustChangePassword Boolean      @default(false)
+  sessions           Session[]
+  accounts           Account[]
+  members            Member[]
+  invitations        Invitation[]
+  passkeys           Passkey[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id                   String   @id @default(uuid())
+  expiresAt            DateTime
+  token                String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  ipAddress            String?
+  userAgent            String?
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeOrganizationId String?
+
+  @@unique([token])
+  @@index([userId])
+  @@index([activeOrganizationId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id @default(uuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model Organization {
+  id          String       @id @default(uuid())
+  name        String
+  slug        String
+  logo        String?
+  createdAt   DateTime
+  metadata    String?
+  members     Member[]
+  invitations Invitation[]
+
+  @@unique([slug])
+  @@map("organization")
+}
+
+model Member {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String       @default("developer")
+  createdAt      DateTime
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([organizationId, role])
+  @@map("member")
+}
+
+model Invitation {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  role           String?
+  status         String       @default("pending")
+  expiresAt      DateTime
+  createdAt      DateTime     @default(now())
+  inviterId      String
+  user           User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([email])
+  @@map("invitation")
+}
+
+model Passkey {
+  id           String    @id @default(uuid())
+  name         String?
+  publicKey    String
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialID String
+  counter      Int
+  deviceType   String
+  backedUp     Boolean
+  transports   String?
+  createdAt    DateTime?
+  aaguid       String?
+
+  @@index([userId])
+  @@index([credentialID])
+  @@map("passkey")
+}
+
+/// 연동 프로젝트 (Jira, GitLab 등)
+model Project {
+  id          String   @id @default(cuid())
+  workspaceId String   @default("default-workspace")
+  name        String
+  type        String
+  baseUrl     String
+  token       String
+  projectKey  String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  jiraIssues JiraIssue[]
+  gitlabMRs  GitlabMR[]
+  syncLogs   SyncLog[]
+  members    ProjectDeveloper[]
+
+  @@index([workspaceId, isActive])
+  @@index([workspaceId, type])
+  @@index([workspaceId, type, baseUrl, projectKey])
+}
+
+/// 개발자 정보
+model Developer {
+  id             String          @id @default(cuid())
+  workspaceId    String          @default("default-workspace")
+  name           String
+  jiraUsername   String?
+  gitlabUsername String?
+  groupId        String?
+  group          DeveloperGroup? @relation(fields: [groupId], references: [id])
+  isActive       Boolean         @default(true)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  scores      Score[]
+  jiraIssues  JiraIssue[]
+  gitlabMRs   GitlabMR[]
+  gitlabNotes GitlabNote[]
+  projects    ProjectDeveloper[]
+
+  @@index([workspaceId, isActive])
+  @@index([workspaceId, name])
+}
+
+/// 프로젝트별 개발자 매핑
+model ProjectDeveloper {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  developerId String
+  developer   Developer @relation(fields: [developerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([projectId, developerId])
+  @@index([developerId])
+}
+
+/// 개발자 그룹
+model DeveloperGroup {
+  id          String      @id @default(cuid())
+  workspaceId String      @default("default-workspace")
+  name        String
+  developers  Developer[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([workspaceId, name])
+}
+
+/// Jira 이슈 스냅샷
+model JiraIssue {
+  id              String     @id @default(cuid())
+  workspaceId     String     @default("default-workspace")
+  issueKey        String
+  summary         String
+  status          String
+  issueType       String
+  assigneeId      String?
+  assignee        Developer? @relation(fields: [assigneeId], references: [id])
+  projectId       String
+  project         Project    @relation(fields: [projectId], references: [id])
+  priority        String?
+  sprintName      String?
+  sprintState     String?
+  storyPoints     Float?
+  ganttStartDate  String?
+  ganttStartOn    DateTime?  @db.Date
+  ganttEndDate    String?
+  ganttEndOn      DateTime?  @db.Date
+  baselineStart   String?
+  baselineStartOn DateTime?  @db.Date
+  baselineEnd     String?
+  baselineEndOn   DateTime?  @db.Date
+  ganttProgress   Float?
+  plannedEffort   Float?
+  actualEffort    Float?
+  remainingEffort Float?
+  timeSpent       Int?
+  dueDate         String?
+  dueOn           DateTime?  @db.Date
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  syncedAt        DateTime   @default(now())
+
+  @@unique([workspaceId, issueKey, projectId])
+  @@index([workspaceId, assigneeId])
+  @@index([workspaceId, projectId])
+}
+
+/// GitLab Merge Request 스냅샷
+model GitlabMR {
+  id                  String     @id @default(cuid())
+  workspaceId         String     @default("default-workspace")
+  mrIid               Int
+  title               String
+  state               String
+  authorId            String?
+  author              Developer? @relation(fields: [authorId], references: [id])
+  projectId           String
+  project             Project    @relation(fields: [projectId], references: [id])
+  sourceProjectKey    String     @default("")
+  sourceProjectName   String?
+  sourceProjectWebUrl String?
+  notesCount          Int        @default(0)
+  changesCount        Int?
+  additions           Int?
+  deletions           Int?
+  sourceBranch        String?
+  targetBranch        String?
+  mrCreatedAt         String
+  mrCreatedAtTs       DateTime?
+  mrMergedAt          String?
+  mrMergedAtTs        DateTime?
+  reviewLeadTime      Int?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+  syncedAt            DateTime   @default(now())
+
+  notes GitlabNote[]
+
+  @@unique([workspaceId, mrIid, projectId, sourceProjectKey])
+  @@index([workspaceId, authorId])
+  @@index([workspaceId, projectId])
+  @@index([workspaceId, projectId, sourceProjectKey])
+}
+
+/// GitLab MR 코멘트
+model GitlabNote {
+  id              String     @id @default(cuid())
+  workspaceId     String     @default("default-workspace")
+  noteId          Int
+  mrId            String
+  mr              GitlabMR   @relation(fields: [mrId], references: [id])
+  body            String
+  authorId        String?
+  author          Developer? @relation(fields: [authorId], references: [id])
+  isSystem        Boolean    @default(false)
+  isResolvable    Boolean    @default(false)
+  isResolved      Boolean    @default(false)
+  noteCreatedAt   String
+  noteCreatedAtTs DateTime?
+  createdAt       DateTime   @default(now())
+
+  @@unique([workspaceId, noteId, mrId])
+  @@index([workspaceId, authorId])
+  @@index([workspaceId, mrId])
+}
+
+/// 개발자 성과 점수
+model Score {
+  id             String    @id @default(cuid())
+  workspaceId    String    @default("default-workspace")
+  developerId    String
+  developer      Developer @relation(fields: [developerId], references: [id])
+  period         String
+  periodStart    DateTime? @db.Date
+  jiraScore      Float     @default(0)
+  gitlabScore    Float     @default(0)
+  compositeScore Float     @default(0)
+  breakdown      String
+  calculatedAt   DateTime  @default(now())
+
+  @@unique([workspaceId, developerId, period])
+  @@index([workspaceId, period])
+  @@index([workspaceId, periodStart])
+}
+
+/// 대시보드 레이아웃 저장
+model DashboardLayout {
+  id          String   @id @default(cuid())
+  workspaceId String   @default("default-workspace")
+  name        String
+  widgets     String
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([workspaceId, isDefault])
+}
+
+/// 스코어링 가중치 설정
+model ScoringWeight {
+  id          String   @id @default(cuid())
+  workspaceId String   @default("default-workspace")
+  key         String
+  value       Float
+  label       String
+  category    String
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, key])
+  @@index([workspaceId, category])
+}
+
+/// AI 프롬프트 연동 설정 (API 키는 암호화해서 저장)
+model AiIntegrationSetting {
+  id                String    @id @default(cuid())
+  workspaceId       String    @default("default-workspace") @map("workspace_id")
+  provider          String
+  encryptedApiKey   String?   @map("encrypted_api_key")
+  model             String?
+  isEnabled         Boolean   @default(false) @map("is_enabled")
+  lastTestedAt      DateTime? @map("last_tested_at")
+  lastTestStatus    String?   @map("last_test_status")
+  lastTestMessage   String?   @map("last_test_message")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@unique([workspaceId, provider])
+  @@index([workspaceId, isEnabled])
+  @@map("ai_integration_settings")
+}
+
+/// 데이터 동기화 로그
+model SyncLog {
+  id          String    @id @default(cuid())
+  workspaceId String    @default("default-workspace")
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id])
+  status      String
+  message     String?
+  itemCount   Int       @default(0)
+  startedAt   DateTime  @default(now())
+  endedAt     DateTime?
+
+  @@index([workspaceId, startedAt])
+  @@index([workspaceId, projectId])
+}
+
+/// Flow Lab 실행 이력
+model FlowRun {
+  id          String        @id
+  workspaceId String
+  mode        String
+  scope       String
+  status      String
+  createdBy   String
+  projectId   String?
+  developerId String?
+  datasetKey  String?
+  strict      Boolean       @default(false)
+  period      String?
+  summary     Json?         @db.JsonB
+  startedAt   DateTime      @default(now()) @db.Timestamptz(6)
+  endedAt     DateTime?     @db.Timestamptz(6)
+  steps       FlowRunStep[]
+
+  @@index([workspaceId, startedAt(sort: Desc)], map: "FlowRun_workspace_startedAt_idx")
+}
+
+/// Flow Lab 실행 단계 이력
+model FlowRunStep {
+  id               String    @id
+  runId            String
+  run              FlowRun   @relation(fields: [runId], references: [id], onDelete: Cascade)
+  nodeKey          String
+  pipelineKey      String
+  serviceKey       String
+  status           String
+  orderIndex       Int
+  targetType       String
+  targetId         String?
+  stale            Boolean   @default(false)
+  dirty            Boolean   @default(false)
+  summary          String?
+  inputPreview     Json?     @db.JsonB
+  outputPreview    Json?     @db.JsonB
+  metrics          Json?     @db.JsonB
+  artifacts        Json?     @db.JsonB
+  error            Json?     @db.JsonB
+  regressionChecks Json?     @db.JsonB
+  startedAt        DateTime  @default(now()) @db.Timestamptz(6)
+  endedAt          DateTime? @db.Timestamptz(6)
+
+  @@index([runId, orderIndex], map: "FlowRunStep_run_order_idx")
+}
